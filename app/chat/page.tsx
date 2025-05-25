@@ -1,8 +1,21 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { supabase, type Message, type User } from '@/lib/supabase'
-import { RealtimeChannel } from '@supabase/supabase-js'
+
+// Supabase 관련 타입 정의
+interface Message {
+  id: string
+  content: string
+  username: string
+  created_at: string
+  user_id?: string
+}
+
+interface User {
+  id: string
+  username: string
+  created_at: string
+}
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -13,9 +26,10 @@ export default function ChatPage() {
   const [onlineUsers, setOnlineUsers] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [supabase, setSupabase] = useState<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const channelRef = useRef<RealtimeChannel | null>(null)
+  const channelRef = useRef<any>(null)
 
   // 자동 스크롤
   const scrollToBottom = () => {
@@ -26,20 +40,53 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
-  // Supabase 실시간 연결 및 메시지 로딩
+  // Supabase 클라이언트 초기화 (클라이언트에서만)
   useEffect(() => {
-    if (username) {
+    const initializeSupabase = async () => {
+      try {
+        const { createClient } = await import('@supabase/supabase-js')
+        
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        
+        if (!supabaseUrl || !supabaseAnonKey) {
+          console.error('Supabase credentials not found')
+          return
+        }
+
+        const client = createClient(supabaseUrl, supabaseAnonKey, {
+          realtime: {
+            params: {
+              eventsPerSecond: 10
+            }
+          }
+        })
+
+        setSupabase(client)
+      } catch (error) {
+        console.error('Failed to initialize Supabase:', error)
+      }
+    }
+
+    initializeSupabase()
+  }, [])
+
+  // 채팅 초기화
+  useEffect(() => {
+    if (username && supabase) {
       initializeChat()
     }
 
     return () => {
-      if (channelRef.current) {
+      if (channelRef.current && supabase) {
         supabase.removeChannel(channelRef.current)
       }
     }
-  }, [username])
+  }, [username, supabase])
 
   const initializeChat = async () => {
+    if (!supabase) return
+
     try {
       setIsLoading(true)
       setIsConnected(false)
@@ -67,6 +114,8 @@ export default function ChatPage() {
   }
 
   const registerOrGetUser = async (): Promise<string> => {
+    if (!supabase) throw new Error('Supabase not initialized')
+
     // 기존 사용자 확인
     const { data: existingUser } = await supabase
       .from('users')
@@ -90,6 +139,8 @@ export default function ChatPage() {
   }
 
   const loadPreviousMessages = async () => {
+    if (!supabase) return
+
     const { data, error } = await supabase
       .from('messages')
       .select('*')
@@ -105,6 +156,8 @@ export default function ChatPage() {
   }
 
   const setupRealtimeSubscription = () => {
+    if (!supabase) return
+
     // 이전 채널 정리
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
@@ -120,12 +173,12 @@ export default function ChatPage() {
           schema: 'public',
           table: 'messages'
         },
-        (payload) => {
+        (payload: any) => {
           const newMessage = payload.new as Message
           setMessages(prev => [...prev, newMessage])
         }
       )
-      .subscribe((status) => {
+      .subscribe((status: string) => {
         console.log('Realtime subscription status:', status)
         setIsConnected(status === 'SUBSCRIBED')
       })
@@ -134,8 +187,9 @@ export default function ChatPage() {
   }
 
   const trackOnlineUser = async (userId: string) => {
-    // 간단한 온라인 사용자 추적 (실제로는 더 정교한 방법 필요)
-    // 현재는 최근 활동한 사용자 수로 근사치 계산
+    if (!supabase) return
+
+    // 간단한 온라인 사용자 추적
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
     
     const { data } = await supabase
@@ -144,7 +198,7 @@ export default function ChatPage() {
       .gte('created_at', fiveMinutesAgo)
 
     if (data) {
-      const uniqueUsers = new Set(data.map(msg => msg.username))
+      const uniqueUsers = new Set(data.map((msg: any) => msg.username))
       setOnlineUsers(uniqueUsers.size)
     }
   }
@@ -159,7 +213,7 @@ export default function ChatPage() {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !currentUserId || !isConnected) return
+    if (!message.trim() || !currentUserId || !isConnected || !supabase) return
 
     try {
       const { error } = await supabase
@@ -187,6 +241,27 @@ export default function ChatPage() {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  // Supabase 로딩 중
+  if (!supabase) {
+    return (
+      <div className="min-h-screen bg-black text-green-400 flex items-center justify-center p-4 crt-effect">
+        <div className="retro-border p-6 md:p-8 w-full max-w-sm md:max-w-md relative">
+          <div className="scanline"></div>
+          <h1 className="text-xl md:text-2xl mb-6 text-center retro-glow typewriter">
+            INITIALIZING_SUPABASE...
+          </h1>
+          <div className="text-center">
+            <div className="mt-4">
+              <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1"></span>
+              <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1 delay-100"></span>
+              <span className="inline-block w-2 h-2 bg-green-400 retro-pulse delay-200"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!username) {
