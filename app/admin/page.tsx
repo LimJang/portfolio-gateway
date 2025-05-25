@@ -283,7 +283,7 @@ export default function AdminPage() {
             </span>
             
             <Link href="/" className="retro-button text-xs py-1 px-3">
-              EXIT_ADMIN
+              HOME
             </Link>
           </div>
         </div>
