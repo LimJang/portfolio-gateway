@@ -5,4 +5,7 @@ node_modules/
 memory-bank/
 .env*
 dist/
-build/
+build/node_modules/
+.next/
+*.log
+.DS_Store
