@@ -39,6 +39,18 @@ export default function AdminPage() {
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('')
   
+  // 모달 상태
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showUserDeleteModal, setShowUserDeleteModal] = useState(false)
+  const [selectedPatch, setSelectedPatch] = useState<PatchNote | null>(null)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [userDeletionInfo, setUserDeletionInfo] = useState({
+    messageCount: 0,
+    patchCount: 0,
+    loading: true
+  })
+  
   // 통계 데이터
   const [stats, setStats] = useState({
     totalPatches: 0,
@@ -56,13 +68,22 @@ export default function AdminPage() {
     is_major: false
   })
   
+  // 편집 폼 데이터
+  const [editFormData, setEditFormData] = useState({
+    version: '',
+    title: '',
+    description: '',
+    category: 'feature' as 'feature' | 'bugfix' | 'security' | 'improvement',
+    is_major: false
+  })
+  
   // 사용자 관리 관련
   const [users, setUsers] = useState<User[]>([])
   
   const router = useRouter()
 
   // 관리자 권한 체크
-  const ADMIN_USERNAMES = ['admin'] // admin 사용자만 관리자 권한
+  const ADMIN_USERNAMES = ['admin']
 
   const isAdmin = (user: AuthUser): boolean => {
     return ADMIN_USERNAMES.includes(user.username.toLowerCase())
@@ -80,7 +101,6 @@ export default function AdminPage() {
 
         const user = JSON.parse(userSession)
         
-        // 관리자 권한 체크
         if (!isAdmin(user)) {
           alert('관리자 권한이 필요합니다.')
           router.push('/')
@@ -125,7 +145,6 @@ export default function AdminPage() {
     if (!supabase) return
 
     try {
-      // 통계 데이터 로드
       const [patchesRes, usersRes] = await Promise.all([
         supabase.from('patch_notes').select('id').eq('published', true),
         supabase.from('users').select('id, created_at')
@@ -142,7 +161,6 @@ export default function AdminPage() {
         recentUsers: recentUsersRes.data?.length || 0
       })
 
-      // 탭별 데이터 로드
       if (activeTab === 'patches') {
         loadPatchNotes()
       } else if (activeTab === 'users') {
@@ -188,6 +206,14 @@ export default function AdminPage() {
     setMessage('')
   }
 
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+    }))
+  }
+
   const handleSubmitPatch = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -219,7 +245,6 @@ export default function AdminPage() {
       setMessage(`패치노트 ${formData.version} 생성 완료!`)
       setMessageType('success')
       
-      // 폼 초기화 및 데이터 새로고침
       setFormData({
         version: '',
         title: '',
@@ -231,6 +256,207 @@ export default function AdminPage() {
       loadPatchNotes()
     } catch (error) {
       setMessage('패치노트 생성 중 오류가 발생했습니다')
+      setMessageType('error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 패치노트 편집 모달 열기
+  const handleEditPatch = (patch: PatchNote) => {
+    setSelectedPatch(patch)
+    setEditFormData({
+      version: patch.version,
+      title: patch.title,
+      description: patch.description,
+      category: patch.category,
+      is_major: patch.is_major
+    })
+    setShowEditModal(true)
+  }
+
+  // 패치노트 수정
+  const handleUpdatePatch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!selectedPatch || !supabase) return
+    
+    setIsLoading(true)
+
+    try {
+      const { error } = await supabase
+        .from('patch_notes')
+        .update({
+          version: editFormData.version.trim(),
+          title: editFormData.title.trim(),
+          description: editFormData.description.trim(),
+          category: editFormData.category,
+          is_major: editFormData.is_major
+        })
+        .eq('id', selectedPatch.id)
+
+      if (error) {
+        setMessage('패치노트 수정 중 오류가 발생했습니다')
+        setMessageType('error')
+        return
+      }
+
+      setMessage(`패치노트 ${editFormData.version} 수정 완료!`)
+      setMessageType('success')
+      setShowEditModal(false)
+      setSelectedPatch(null)
+      loadPatchNotes()
+    } catch (error) {
+      setMessage('패치노트 수정 중 오류가 발생했습니다')
+      setMessageType('error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 패치노트 삭제 확인 모달
+  const handleDeletePatch = (patch: PatchNote) => {
+    setSelectedPatch(patch)
+    setShowDeleteModal(true)
+  }
+
+  // 패치노트 삭제 실행
+  const confirmDeletePatch = async () => {
+    if (!selectedPatch || !supabase) return
+    
+    setIsLoading(true)
+
+    try {
+      const { error } = await supabase
+        .from('patch_notes')
+        .delete()
+        .eq('id', selectedPatch.id)
+
+      if (error) {
+        setMessage('패치노트 삭제 중 오류가 발생했습니다')
+        setMessageType('error')
+        return
+      }
+
+      setMessage(`패치노트 ${selectedPatch.version} 삭제 완료!`)
+      setMessageType('success')
+      setShowDeleteModal(false)
+      setSelectedPatch(null)
+      loadPatchNotes()
+    } catch (error) {
+      setMessage('패치노트 삭제 중 오류가 발생했습니다')
+      setMessageType('error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 발행/비발행 토글
+  const togglePublished = async (patch: PatchNote) => {
+    if (!supabase) return
+
+    try {
+      const { error } = await supabase
+        .from('patch_notes')
+        .update({ published: !patch.published })
+        .eq('id', patch.id)
+
+      if (error) {
+        setMessage('발행 상태 변경 중 오류가 발생했습니다')
+        setMessageType('error')
+        return
+      }
+
+      setMessage(`패치노트 ${patch.published ? '비발행' : '발행'} 처리 완료!`)
+      setMessageType('success')
+      loadPatchNotes()
+    } catch (error) {
+      setMessage('발행 상태 변경 중 오류가 발생했습니다')
+      setMessageType('error')
+    }
+  }
+
+  // 사용자 삭제 확인 모달 열기
+  const handleDeleteUser = async (user: User) => {
+    if (!supabase) return
+
+    // admin 사용자는 삭제 불가
+    if (user.username === 'admin') {
+      setMessage('관리자 계정은 삭제할 수 없습니다')
+      setMessageType('error')
+      return
+    }
+
+    setSelectedUser(user)
+    setUserDeletionInfo({ messageCount: 0, patchCount: 0, loading: true })
+    setShowUserDeleteModal(true)
+
+    try {
+      // 사용자의 메시지 및 패치노트 수 조회
+      const [messagesRes, patchesRes] = await Promise.all([
+        supabase.from('messages').select('id').eq('user_id', user.id),
+        supabase.from('patch_notes').select('id').eq('author_id', user.id)
+      ])
+
+      setUserDeletionInfo({
+        messageCount: messagesRes.data?.length || 0,
+        patchCount: patchesRes.data?.length || 0,
+        loading: false
+      })
+    } catch (error) {
+      console.error('사용자 정보 조회 에러:', error)
+      setUserDeletionInfo({ messageCount: 0, patchCount: 0, loading: false })
+    }
+  }
+
+  // 사용자 삭제 실행 (순차 삭제)
+  const confirmDeleteUser = async () => {
+    if (!selectedUser || !supabase) return
+    
+    setIsLoading(true)
+
+    try {
+      // 1. 먼저 해당 사용자의 메시지 삭제
+      const { error: messagesError } = await supabase
+        .from('messages')
+        .delete()
+        .eq('user_id', selectedUser.id)
+
+      if (messagesError) {
+        throw new Error('메시지 삭제 실패: ' + messagesError.message)
+      }
+
+      // 2. 해당 사용자가 작성한 패치노트 삭제
+      const { error: patchesError } = await supabase
+        .from('patch_notes')
+        .delete()
+        .eq('author_id', selectedUser.id)
+
+      if (patchesError) {
+        throw new Error('패치노트 삭제 실패: ' + patchesError.message)
+      }
+
+      // 3. 마지막으로 사용자 삭제
+      const { error: userError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', selectedUser.id)
+
+      if (userError) {
+        throw new Error('사용자 삭제 실패: ' + userError.message)
+      }
+
+      setMessage(`사용자 ${selectedUser.display_name} 및 관련 데이터 삭제 완료!`)
+      setMessageType('success')
+      setShowUserDeleteModal(false)
+      setSelectedUser(null)
+      
+      // 데이터 새로고침
+      loadUsers()
+      loadDashboardData()
+    } catch (error) {
+      console.error('사용자 삭제 에러:', error)
+      setMessage('사용자 삭제 중 오류가 발생했습니다: ' + error)
       setMessageType('error')
     } finally {
       setIsLoading(false)
@@ -363,8 +589,8 @@ export default function AdminPage() {
                   onClick={() => setActiveTab('patches')}
                   className="retro-button p-4 text-left hover:bg-purple-400 hover:bg-opacity-10"
                 >
-                  <div className="text-purple-400 mb-2">📋 CREATE_PATCH_NOTE</div>
-                  <div className="text-xs text-gray-400">Add new update entry</div>
+                  <div className="text-purple-400 mb-2">📋 MANAGE_PATCHES</div>
+                  <div className="text-xs text-gray-400">Create, Edit, Delete patch notes</div>
                 </button>
                 
                 <button
@@ -372,7 +598,7 @@ export default function AdminPage() {
                   className="retro-button p-4 text-left hover:bg-blue-400 hover:bg-opacity-10"
                 >
                   <div className="text-blue-400 mb-2">👥 MANAGE_USERS</div>
-                  <div className="text-xs text-gray-400">View and manage users</div>
+                  <div className="text-xs text-gray-400">View and delete users</div>
                 </button>
               </div>
             </div>
@@ -401,7 +627,7 @@ export default function AdminPage() {
                       value={formData.version}
                       onChange={handleInputChange}
                       className="retro-input w-full"
-                      placeholder="v1.5.0"
+                      placeholder="v1.6.0"
                       required
                     />
                   </div>
@@ -458,16 +684,6 @@ export default function AdminPage() {
                   <label className="text-yellow-400 text-xs">⭐ MAJOR_RELEASE</label>
                 </div>
 
-                {message && (
-                  <div className={`retro-border p-3 ${
-                    messageType === 'success' ? 'border-green-400 bg-green-400 bg-opacity-10' : 'border-red-400 bg-red-400 bg-opacity-10'
-                  }`}>
-                    <p className={`text-xs ${messageType === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-                      &gt; {message}
-                    </p>
-                  </div>
-                )}
-
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -478,19 +694,71 @@ export default function AdminPage() {
               </form>
             </div>
             
+            {/* Message Display */}
+            {message && (
+              <div className={`retro-border p-3 mb-6 ${
+                messageType === 'success' ? 'border-green-400 bg-green-400 bg-opacity-10' : 'border-red-400 bg-red-400 bg-opacity-10'
+              }`}>
+                <p className={`text-xs ${messageType === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                  &gt; {message}
+                </p>
+              </div>
+            )}
+            
             {/* Patch Notes List */}
             <div className="retro-border p-6">
               <h3 className="text-xl mb-4 text-purple-400 retro-glow">&gt; EXISTING_PATCHES ({patchNotes.length})</h3>
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {patchNotes.map((patch) => (
-                  <div key={patch.id} className="retro-border p-3 bg-gray-900 bg-opacity-30">
+                  <div key={patch.id} className="retro-border p-4 bg-gray-900 bg-opacity-30">
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-green-400 font-bold">{patch.version}</span>
+                      <div className="flex items-center space-x-3">
+                        <span className="text-green-400 font-bold">{patch.version}</span>
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          patch.published 
+                            ? 'bg-green-400 bg-opacity-20 text-green-400' 
+                            : 'bg-red-400 bg-opacity-20 text-red-400'
+                        }`}>
+                          {patch.published ? '발행됨' : '비발행'}
+                        </span>
+                        {patch.is_major && <span className="text-yellow-400 text-xs">⭐ MAJOR</span>}
+                      </div>
                       <span className="text-xs text-gray-500">{formatDate(patch.created_at)}</span>
                     </div>
-                    <div className="text-white text-sm">{patch.title}</div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {patch.category.toUpperCase()} {patch.is_major && '⭐ MAJOR'}
+                    
+                    <div className="text-white text-sm mb-3">{patch.title}</div>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="text-xs text-gray-400">
+                        {patch.category.toUpperCase()} | by {patch.author_name}
+                      </div>
+                      
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => togglePublished(patch)}
+                          className={`retro-button text-xs py-1 px-2 ${
+                            patch.published 
+                              ? 'border-red-400 text-red-400 hover:bg-red-400' 
+                              : 'border-green-400 text-green-400 hover:bg-green-400'
+                          } hover:text-black`}
+                        >
+                          {patch.published ? '비발행' : '발행'}
+                        </button>
+                        
+                        <button
+                          onClick={() => handleEditPatch(patch)}
+                          className="retro-button text-xs py-1 px-2 border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-black"
+                        >
+                          수정
+                        </button>
+                        
+                        <button
+                          onClick={() => handleDeletePatch(patch)}
+                          className="retro-button text-xs py-1 px-2 border-red-400 text-red-400 hover:bg-red-400 hover:text-black"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -506,6 +774,17 @@ export default function AdminPage() {
               &gt; USER_MANAGEMENT_
             </h2>
             
+            {/* Message Display */}
+            {message && (
+              <div className={`retro-border p-3 mb-6 ${
+                messageType === 'success' ? 'border-green-400 bg-green-400 bg-opacity-10' : 'border-red-400 bg-red-400 bg-opacity-10'
+              }`}>
+                <p className={`text-xs ${messageType === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                  &gt; {message}
+                </p>
+              </div>
+            )}
+            
             <div className="retro-border p-6">
               <h3 className="text-xl mb-4 text-blue-400 retro-glow">&gt; REGISTERED_USERS ({users.length})</h3>
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -517,7 +796,17 @@ export default function AdminPage() {
                         <span className="text-gray-500 ml-2">@{user.username}</span>
                         {user.username === 'admin' && <span className="text-red-400 ml-2">👑 ADMIN</span>}
                       </div>
-                      <span className="text-xs text-gray-500">가입: {formatDate(user.created_at)}</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-gray-500">가입: {formatDate(user.created_at)}</span>
+                        {user.username !== 'admin' && (
+                          <button
+                            onClick={() => handleDeleteUser(user)}
+                            className="retro-button text-xs py-1 px-2 border-red-400 text-red-400 hover:bg-red-400 hover:text-black"
+                          >
+                            삭제
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="text-xs text-gray-400">
                       최근 로그인: {formatDate(user.last_login)}
@@ -529,6 +818,202 @@ export default function AdminPage() {
           </section>
         )}
       </main>
+
+      {/* Edit Modal */}
+      {showEditModal && selectedPatch && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="retro-border p-6 w-full max-w-2xl bg-black relative">
+            <div className="scanline"></div>
+            <h3 className="text-xl mb-4 text-purple-400 retro-glow">&gt; EDIT_PATCH_NOTE</h3>
+            
+            <form onSubmit={handleUpdatePatch} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs mb-2 text-green-400">&gt; VERSION:</label>
+                  <input
+                    type="text"
+                    name="version"
+                    value={editFormData.version}
+                    onChange={handleEditInputChange}
+                    className="retro-input w-full"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs mb-2 text-green-400">&gt; CATEGORY:</label>
+                  <select
+                    name="category"
+                    value={editFormData.category}
+                    onChange={handleEditInputChange}
+                    className="retro-input w-full"
+                  >
+                    <option value="feature">✨ FEATURE</option>
+                    <option value="improvement">⚡ IMPROVEMENT</option>
+                    <option value="security">🔒 SECURITY</option>
+                    <option value="bugfix">🐛 BUGFIX</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs mb-2 text-green-400">&gt; TITLE:</label>
+                <input
+                  type="text"
+                  name="title"
+                  value={editFormData.title}
+                  onChange={handleEditInputChange}
+                  className="retro-input w-full"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs mb-2 text-green-400">&gt; DESCRIPTION:</label>
+                <textarea
+                  name="description"
+                  value={editFormData.description}
+                  onChange={handleEditInputChange}
+                  className="retro-input w-full h-32"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  name="is_major"
+                  checked={editFormData.is_major}
+                  onChange={handleEditInputChange}
+                  className="w-4 h-4"
+                />
+                <label className="text-yellow-400 text-xs">⭐ MAJOR_RELEASE</label>
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="retro-button flex-1 py-3"
+                >
+                  {isLoading ? 'UPDATING...' : 'UPDATE_PATCH'}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setSelectedPatch(null)
+                  }}
+                  className="retro-button flex-1 py-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black"
+                >
+                  CANCEL
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Patch Confirmation Modal */}
+      {showDeleteModal && selectedPatch && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="retro-border p-6 w-full max-w-md bg-black relative">
+            <div className="scanline"></div>
+            <h3 className="text-xl mb-4 text-red-400 retro-glow">&gt; DELETE_PATCH_CONFIRMATION</h3>
+            
+            <div className="mb-6">
+              <p className="text-white mb-2">패치노트를 삭제하시겠습니까?</p>
+              <div className="retro-border p-3 bg-red-400 bg-opacity-10">
+                <p className="text-red-400 text-sm font-bold">{selectedPatch.version}: {selectedPatch.title}</p>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">⚠️ 이 작업은 되돌릴 수 없습니다!</p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={confirmDeletePatch}
+                disabled={isLoading}
+                className="retro-button flex-1 py-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black"
+              >
+                {isLoading ? 'DELETING...' : 'DELETE'}
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false)
+                  setSelectedPatch(null)
+                }}
+                className="retro-button flex-1 py-3"
+              >
+                CANCEL
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {showUserDeleteModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="retro-border p-6 w-full max-w-lg bg-black relative">
+            <div className="scanline"></div>
+            <h3 className="text-xl mb-4 text-red-400 retro-glow">&gt; DELETE_USER_CONFIRMATION</h3>
+            
+            <div className="mb-6">
+              <p className="text-white mb-3">사용자와 모든 관련 데이터를 삭제하시겠습니까?</p>
+              
+              <div className="retro-border p-3 bg-red-400 bg-opacity-10 mb-4">
+                <p className="text-red-400 text-sm font-bold">
+                  {selectedUser.display_name} (@{selectedUser.username})
+                </p>
+              </div>
+
+              {userDeletionInfo.loading ? (
+                <div className="text-center py-4">
+                  <span className="text-gray-400 text-sm">관련 데이터 조회 중...</span>
+                  <div className="mt-2">
+                    <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1"></span>
+                    <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1 delay-100"></span>
+                    <span className="inline-block w-2 h-2 bg-green-400 retro-pulse delay-200"></span>
+                  </div>
+                </div>
+              ) : (
+                <div className="retro-border p-3 bg-yellow-400 bg-opacity-10 mb-4">
+                  <p className="text-yellow-400 text-xs mb-2">⚠️ 함께 삭제될 데이터:</p>
+                  <div className="text-white text-xs space-y-1">
+                    <p>• 메시지: {userDeletionInfo.messageCount}개</p>
+                    <p>• 패치노트: {userDeletionInfo.patchCount}개</p>
+                    <p>• 사용자 계정: 1개</p>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-400">⚠️ 이 작업은 되돌릴 수 없습니다!</p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={confirmDeleteUser}
+                disabled={isLoading || userDeletionInfo.loading}
+                className="retro-button flex-1 py-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black"
+              >
+                {isLoading ? 'DELETING...' : 'DELETE_ALL'}
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowUserDeleteModal(false)
+                  setSelectedUser(null)
+                }}
+                className="retro-button flex-1 py-3"
+              >
+                CANCEL
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none">
