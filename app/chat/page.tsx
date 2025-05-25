@@ -60,22 +60,22 @@ export default function ChatPage() {
   if (!username) {
     return (
       <div className="min-h-screen bg-black text-green-400 flex items-center justify-center p-4 crt-effect">
-        <div className="retro-border p-8 w-full max-w-md relative">
+        <div className="retro-border p-6 md:p-8 w-full max-w-sm md:max-w-md relative">
           <div className="scanline"></div>
-          <h1 className="text-2xl mb-6 text-center retro-glow typewriter">
+          <h1 className="text-xl md:text-2xl mb-6 text-center retro-glow typewriter">
             TERMINAL_LOGIN
           </h1>
           
-          <form onSubmit={handleUsernameSubmit} className="space-y-6">
+          <form onSubmit={handleUsernameSubmit} className="space-y-4 md:space-y-6">
             <div>
-              <label className="block text-sm mb-2 text-green-400">
+              <label className="block text-xs md:text-sm mb-2 text-green-400">
                 &gt; ENTER_USERNAME:
               </label>
               <input
                 type="text"
                 value={usernameInput}
                 onChange={(e) => setUsernameInput(e.target.value)}
-                className="retro-input w-full"
+                className="retro-input w-full text-sm md:text-base"
                 placeholder="username_"
                 maxLength={20}
                 required
@@ -85,13 +85,13 @@ export default function ChatPage() {
             
             <button
               type="submit"
-              className="retro-button w-full"
+              className="retro-button w-full text-xs md:text-sm py-3 md:py-4"
             >
               CONNECT_TO_SYSTEM
             </button>
           </form>
           
-          <div className="mt-6 text-xs text-gray-500 space-y-1">
+          <div className="mt-4 md:mt-6 text-xs text-gray-500 space-y-1">
             <p>&gt; Connection secured via SSL</p>
             <p>&gt; Protocol: WebSocket 2.0</p>
             <p>&gt; Server status: ONLINE</p>
@@ -104,55 +104,82 @@ export default function ChatPage() {
   return (
     <div className="min-h-screen bg-black text-green-400 flex flex-col crt-effect">
       {/* Header */}
-      <header className="border-b-2 border-green-400 p-4 retro-flicker">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <h1 className="text-xl retro-glow">
-            CHAT_TERMINAL.EXE
-          </h1>
-          
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm">USERS_ONLINE:</span>
-              <span className="text-yellow-400">{onlineUsers}</span>
+      <header className="border-b-2 border-green-400 p-3 md:p-4 retro-flicker">
+        <div className="max-w-6xl mx-auto">
+          {/* Desktop Header */}
+          <div className="hidden md:flex justify-between items-center">
+            <h1 className="text-xl retro-glow">
+              CHAT_TERMINAL.EXE
+            </h1>
+            
+            <div className="flex items-center space-x-6">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm">USERS_ONLINE:</span>
+                <span className="text-yellow-400">{onlineUsers}</span>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                <span className="text-sm">{isConnected ? 'CONNECTED' : 'DISCONNECTED'}</span>
+              </div>
+              
+              <a href="/" className="retro-button text-xs py-1 px-3">
+                EXIT
+              </a>
+            </div>
+          </div>
+
+          {/* Mobile Header */}
+          <div className="md:hidden space-y-3">
+            <div className="flex justify-between items-center">
+              <h1 className="text-lg retro-glow">
+                CHAT_TERMINAL
+              </h1>
+              <a href="/" className="retro-button text-xs py-1 px-3">
+                EXIT
+              </a>
             </div>
             
-            <div className="flex items-center space-x-2">
-              <div className={`w-3 h-3 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-              <span className="text-sm">{isConnected ? 'CONNECTED' : 'DISCONNECTED'}</span>
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center space-x-2">
+                <span>USERS:</span>
+                <span className="text-yellow-400">{onlineUsers}</span>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                <span>{isConnected ? 'ONLINE' : 'OFFLINE'}</span>
+              </div>
             </div>
-            
-            <a href="/" className="retro-button text-xs py-1 px-3">
-              EXIT
-            </a>
           </div>
         </div>
       </header>
 
       {/* User Info */}
-      <div className="border-b border-gray-700 p-3 bg-gray-900 bg-opacity-50">
+      <div className="border-b border-gray-700 p-2 md:p-3 bg-gray-900 bg-opacity-50">
         <div className="max-w-6xl mx-auto">
-          <span className="text-sm">
+          <span className="text-xs md:text-sm">
             &gt; Logged in as: <span className="text-orange-400">{username}</span>
           </span>
         </div>
       </div>
 
       {/* Chat Container */}
-      <div className="flex-1 max-w-6xl mx-auto w-full flex flex-col">
+      <div className="flex-1 max-w-6xl mx-auto w-full flex flex-col min-h-0">
         
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-black bg-opacity-80 retro-border border-t-0 border-b-0">
+        <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3 bg-black bg-opacity-80 retro-border border-t-0 border-b-0">
           {messages.length === 0 ? (
-            <div className="text-center text-gray-500 mt-8 fade-in-up">
-              <p>&gt; Terminal ready for input...</p>
+            <div className="text-center text-gray-500 mt-4 md:mt-8 fade-in-up">
+              <p className="text-sm md:text-base">&gt; Terminal ready for input...</p>
               <p className="text-xs mt-2">&gt; Type your message below to begin communication</p>
             </div>
           ) : (
             messages.map((msg) => (
               <div key={msg.id} className="fade-in-up">
-                <div className={`retro-message ${msg.user === username ? 'user' : ''}`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-sm font-bold">
+                <div className={`retro-message ${msg.user === username ? 'user' : ''} text-sm md:text-base`}>
+                  <div className="flex justify-between items-start mb-1 md:mb-2">
+                    <span className="text-xs md:text-sm font-bold">
                       {msg.user === 'SYSTEM' ? (
                         <span className="text-yellow-400">[SYSTEM]</span>
                       ) : (
@@ -165,7 +192,7 @@ export default function ChatPage() {
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p className="text-white">{msg.message}</p>
+                  <p className="text-white break-words">{msg.message}</p>
                 </div>
               </div>
             ))
@@ -174,9 +201,10 @@ export default function ChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="retro-border border-t-2 border-green-400 p-4 bg-gray-900 bg-opacity-50">
-          <form onSubmit={sendMessage} className="space-y-3">
-            <div className="flex space-x-3">
+        <div className="retro-border border-t-2 border-green-400 p-3 md:p-4 bg-gray-900 bg-opacity-50">
+          <form onSubmit={sendMessage} className="space-y-2 md:space-y-3">
+            {/* Desktop Input */}
+            <div className="hidden md:flex space-x-3">
               <span className="text-green-400 text-sm self-center">&gt;</span>
               <input
                 type="text"
@@ -196,23 +224,50 @@ export default function ChatPage() {
                 SEND
               </button>
             </div>
+
+            {/* Mobile Input */}
+            <div className="md:hidden space-y-3">
+              <div className="flex space-x-2">
+                <span className="text-green-400 text-sm self-center">&gt;</span>
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  className="retro-input flex-1 text-sm"
+                  placeholder="Type message..."
+                  maxLength={500}
+                  disabled={!isConnected}
+                  autoFocus
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={!isConnected || !message.trim()}
+                className="retro-button w-full text-xs py-3"
+              >
+                SEND MESSAGE
+              </button>
+            </div>
             
             <div className="flex justify-between text-xs text-gray-500">
-              <span>
+              <span className="hidden md:block">
                 &gt; Status: {isConnected ? 'Ready for input' : 'Connection lost'}
               </span>
+              <span className="md:hidden">
+                &gt; {isConnected ? 'Ready' : 'No connection'}
+              </span>
               <span>
-                &gt; Characters: {message.length}/500
+                &gt; {message.length}/500
               </span>
             </div>
           </form>
         </div>
       </div>
 
-      {/* Background Effects */}
+      {/* Background Effects - 모바일에서는 더 적게 */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-1/3 right-1/4 w-px h-px bg-green-400 shadow-[0_0_20px_10px_rgba(0,255,65,0.2)] animate-pulse"></div>
-        <div className="absolute bottom-1/3 left-1/4 w-px h-px bg-orange-400 shadow-[0_0_15px_8px_rgba(255,107,53,0.2)] animate-pulse delay-1000"></div>
+        <div className="hidden md:block absolute bottom-1/3 left-1/4 w-px h-px bg-orange-400 shadow-[0_0_15px_8px_rgba(255,107,53,0.2)] animate-pulse delay-1000"></div>
       </div>
     </div>
   )
