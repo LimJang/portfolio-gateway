@@ -1,6 +1,4 @@
-{
-  `path`: `/Users/ogf2002/portfolio-gateway/.gitignore`,
-  `content`: `node_modules/
+node_modules/
 .next/
 *.log
 .DS_Store
@@ -9,5 +7,3 @@ memory-bank/
 dist/
 build/
 legacy-socketio/
-`
-}
