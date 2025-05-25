@@ -35,30 +35,60 @@ export async function POST(request: NextRequest) {
 
     console.log('🔧 서버사이드 사용자 삭제 시작:', { userId, adminId })
 
-    // 관리자 권한 확인
+    // 관리자 권한 확인 - 디버깅 추가
+    console.log('🔍 관리자 권한 검증 시작...')
     const { data: adminUser, error: adminError } = await supabaseAdmin
       .from('users')
-      .select('username')
+      .select('id, username, display_name')
       .eq('id', adminId)
       .single()
 
-    if (adminError || !adminUser || adminUser.username !== 'admin') {
+    console.log('관리자 조회 결과:', { adminUser, adminError })
+
+    if (adminError) {
+      console.error('관리자 조회 에러:', adminError)
       return NextResponse.json(
-        { error: '관리자 권한이 필요합니다' },
+        { error: '관리자 정보를 조회할 수 없습니다: ' + adminError.message },
         { status: 403 }
       )
     }
 
-    // admin 사용자 삭제 방지
+    if (!adminUser) {
+      console.error('관리자 사용자를 찾을 수 없음')
+      return NextResponse.json(
+        { error: '관리자 사용자를 찾을 수 없습니다' },
+        { status: 403 }
+      )
+    }
+
+    // username이 admin인지 확인 (대소문자 무시)
+    const isAdminUser = adminUser.username?.toLowerCase() === 'admin'
+    console.log('관리자 권한 체크:', { 
+      username: adminUser.username, 
+      isAdmin: isAdminUser 
+    })
+
+    if (!isAdminUser) {
+      console.error('관리자 권한 없음:', adminUser.username)
+      return NextResponse.json(
+        { error: `권한이 없습니다. 현재 사용자: ${adminUser.username}` },
+        { status: 403 }
+      )
+    }
+
+    // 삭제 대상 사용자 확인
+    console.log('🔍 삭제 대상 사용자 확인...')
     const { data: targetUser, error: targetError } = await supabaseAdmin
       .from('users')
-      .select('username')
+      .select('id, username, display_name')
       .eq('id', userId)
       .single()
 
+    console.log('삭제 대상 조회 결과:', { targetUser, targetError })
+
     if (targetError) {
       return NextResponse.json(
-        { error: '사용자를 찾을 수 없습니다' },
+        { error: '삭제 대상 사용자를 찾을 수 없습니다: ' + targetError.message },
         { status: 404 }
       )
     }
@@ -69,6 +99,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    console.log('✅ 권한 검증 완료. 삭제 프로세스 시작...')
 
     // 1. 메시지 삭제
     console.log('1️⃣ 서버: 메시지 삭제 시작...')
@@ -110,7 +142,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '사용자 및 관련 데이터가 성공적으로 삭제되었습니다'
+      message: `사용자 ${targetUser.display_name} (${targetUser.username}) 및 관련 데이터가 성공적으로 삭제되었습니다`
     })
 
   } catch (error) {

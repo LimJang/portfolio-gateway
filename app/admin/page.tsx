@@ -417,21 +417,29 @@ export default function AdminPage() {
     }
     
     console.log('🚀 API를 통한 사용자 삭제 시작:', selectedUser.id)
+    console.log('🔑 관리자 정보:', authUser)
     setIsLoading(true)
 
     try {
+      const requestBody = {
+        userId: selectedUser.id,
+        adminId: authUser.id
+      }
+      
+      console.log('📦 요청 데이터:', requestBody)
+      
       const response = await fetch('/api/admin/delete-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          adminId: authUser.id
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const result = await response.json()
+      
+      console.log('📨 응답 상태:', response.status)
+      console.log('📨 응답 데이터:', result)
 
       if (!response.ok) {
         throw new Error(result.error || '사용자 삭제 중 오류가 발생했습니다')
