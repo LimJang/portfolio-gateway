@@ -11,15 +11,67 @@ interface AuthUser {
   loginTime: string
 }
 
+interface LatestPatch {
+  version: string
+  title: string
+  category: string
+  is_major: boolean
+  created_at: string
+}
+
 export default function Home() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [latestPatch, setLatestPatch] = useState<LatestPatch | null>(null)
+  const [supabase, setSupabase] = useState<any>(null)
   const router = useRouter()
 
   // 관리자 체크
   const isAdmin = (user: AuthUser): boolean => {
     return user.username.toLowerCase() === 'admin'
   }
+
+  // Supabase 초기화
+  useEffect(() => {
+    const initSupabase = async () => {
+      try {
+        const { createClient } = await import('@supabase/supabase-js')
+        const url = 'https://vdiqoxxaiiwgqvmtwxxy.supabase.co'
+        const key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaXFveHhhaWl3Z3F2bXR3eHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxNzQ0ODAsImV4cCI6MjA2Mzc1MDQ4MH0.ZxwDHCADi5Q5jxJt6Isjik5j_AmalQE2wYH7SvPpHDA'
+        
+        const client = createClient(url, key)
+        setSupabase(client)
+      } catch (error) {
+        console.error('Supabase 초기화 실패:', error)
+      }
+    }
+    initSupabase()
+  }, [])
+
+  // 최신 패치노트 가져오기
+  useEffect(() => {
+    const fetchLatestPatch = async () => {
+      if (!supabase) return
+
+      try {
+        const { data, error } = await supabase
+          .from('patch_notes')
+          .select('version, title, category, is_major, created_at')
+          .eq('published', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (!error && data) {
+          setLatestPatch(data)
+        }
+      } catch (error) {
+        console.error('최신 패치노트 조회 실패:', error)
+      }
+    }
+
+    fetchLatestPatch()
+  }, [supabase])
 
   // 인증 상태 체크
   useEffect(() => {
@@ -53,6 +105,15 @@ export default function Home() {
     } else {
       router.push(path)
     }
+  }
+
+  // 날짜 포맷팅
+  const formatDate = (timestamp: string) => {
+    return new Date(timestamp).toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   return (
@@ -158,7 +219,9 @@ export default function Home() {
               <h3 className="text-lg md:text-xl mb-2 text-green-400">PATCH_SYSTEM</h3>
               <div className="flex items-center justify-center">
                 <div className="w-3 h-3 md:w-4 md:h-4 bg-purple-400 retro-pulse mr-2"></div>
-                <span className="text-sm md:text-base">v1.5.0</span>
+                <span className="text-sm md:text-base">
+                  {latestPatch ? latestPatch.version : 'Loading...'}
+                </span>
               </div>
             </div>
           </div>
@@ -319,22 +382,24 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Recent Updates */}
-        <section className="retro-border p-4 md:p-6 mb-8 border-purple-400 bg-purple-400 bg-opacity-5">
-          <div className="text-center">
-            <h3 className="text-lg md:text-xl mb-3 text-purple-400 retro-glow">
-              🚀 LATEST UPDATE: v1.5.0
-            </h3>
-            <p className="text-sm md:text-base text-gray-400 mb-4">
-              Admin 권한 시스템 및 관리자 도구 허브 완전 구현
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
-              <div>&gt; Admin Authority Control</div>
-              <div>&gt; Management Tools Hub</div>
-              <div>&gt; Real-time System Monitoring</div>
+        {/* Recent Updates - 동적 데이터 */}
+        {latestPatch && (
+          <section className="retro-border p-4 md:p-6 mb-8 border-purple-400 bg-purple-400 bg-opacity-5">
+            <div className="text-center">
+              <h3 className="text-lg md:text-xl mb-3 text-purple-400 retro-glow">
+                🚀 LATEST UPDATE: {latestPatch.version}
+              </h3>
+              <p className="text-sm md:text-base text-gray-400 mb-4">
+                {latestPatch.title}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
+                <div>&gt; Category: {latestPatch.category.toUpperCase()}</div>
+                <div>&gt; Type: {latestPatch.is_major ? 'MAJOR RELEASE' : 'UPDATE'}</div>
+                <div>&gt; Date: {formatDate(latestPatch.created_at)}</div>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Security Notice */}
         <section className="retro-border p-4 md:p-6 mb-8 border-blue-400 bg-blue-400 bg-opacity-5">
@@ -356,12 +421,12 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Terminal Footer */}
+        {/* Terminal Footer - 동적 버전 */}
         <section className="retro-border p-4 md:p-6 retro-flicker">
           <div className="text-xs md:text-sm space-y-1 md:space-y-2 break-all">
             <p className="hidden sm:block">&gt; SYSTEM_INFO: Next.js 14.2.3 | Vercel Cloud Platform | Supabase Database</p>
             <p className="sm:hidden">&gt; SYSTEM: Next.js 14.2.3 + Auth + Admin</p>
-            <p>&gt; BUILD_STATUS: Deployment successful ✓ | Version: v1.5.0</p>
+            <p>&gt; BUILD_STATUS: Deployment successful ✓ | Version: {latestPatch ? latestPatch.version : 'Loading...'}</p>
             <p className="hidden md:block">&gt; USER_STATUS: {authUser ? `Authenticated as ${authUser.displayName}` : 'Guest User'}</p>
             <p className="md:hidden">&gt; USER: {authUser ? authUser.displayName : 'Guest'}</p>
             <p>&gt; FEATURES: Auth + Chat + Patch Notes + Admin | Security: Enhanced</p>
