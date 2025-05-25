@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { supabase, type Message, type User } from '@/lib/supabase'
+import { supabase, type Message } from '@/lib/supabase'
 import { RealtimeChannel } from '@supabase/supabase-js'
 
 export default function ChatPage() {
@@ -12,9 +12,8 @@ export default function ChatPage() {
   const [isConnected, setIsConnected] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
 
   // 자동 스크롤
@@ -26,7 +25,7 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
-  // Supabase 실시간 연결 및 메시지 로딩
+  // Supabase 실시간 연결
   useEffect(() => {
     if (username) {
       initializeChat()
@@ -34,7 +33,7 @@ export default function ChatPage() {
 
     return () => {
       if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
+        channelRef.current.unsubscribe()
       }
     }
   }, [username])
@@ -42,110 +41,104 @@ export default function ChatPage() {
   const initializeChat = async () => {
     try {
       setIsLoading(true)
-      setIsConnected(false)
 
-      // 1. 사용자 등록 또는 가져오기
-      const userId = await registerOrGetUser()
+      // 1. 사용자 생성/조회
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single()
+
+      let userId = existingUser?.id
+
+      if (!existingUser) {
+        const { data: newUser, error } = await supabase
+          .from('users')
+          .insert([{ username }])
+          .select()
+          .single()
+
+        if (error) throw error
+        userId = newUser.id
+      }
+
       setCurrentUserId(userId)
 
-      // 2. 이전 메시지 로드
-      await loadPreviousMessages()
+      // 2. 이전 메시지 로드 (최근 50개)
+      const { data: previousMessages, error: messagesError } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(50)
+
+      if (messagesError) throw messagesError
+
+      setMessages(previousMessages || [])
 
       // 3. 실시간 구독 설정
-      setupRealtimeSubscription()
+      const channel = supabase
+        .channel('chat-messages')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+          },
+          (payload) => {
+            const newMessage = payload.new as Message
+            setMessages(prev => [...prev, newMessage])
+          }
+        )
+        .on(
+          'presence',
+          { event: 'sync' },
+          () => {
+            const state = channel.presenceState()
+            setOnlineUsers(Object.keys(state).length)
+          }
+        )
+        .on(
+          'presence',
+          { event: 'join' },
+          ({ key, newPresences }) => {
+            console.log('user joined:', key, newPresences)
+          }
+        )
+        .on(
+          'presence',
+          { event: 'leave' },
+          ({ key, leftPresences }) => {
+            console.log('user left:', key, leftPresences)
+          }
+        )
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            setIsConnected(true)
+            setIsLoading(false)
 
-      // 4. 온라인 사용자 추적
-      await trackOnlineUser(userId)
+            // 온라인 상태 추가
+            await channel.track({
+              user: username,
+              online_at: new Date().toISOString(),
+            })
 
-      setIsConnected(true)
-      setIsLoading(false)
+            // 입장 메시지
+            await supabase.from('messages').insert([
+              {
+                content: `${username} joined the chat`,
+                username: 'SYSTEM',
+                user_id: null
+              }
+            ])
+          }
+        })
+
+      channelRef.current = channel
 
     } catch (error) {
-      console.error('Chat initialization error:', error)
+      console.error('Error initializing chat:', error)
       setIsLoading(false)
-    }
-  }
-
-  const registerOrGetUser = async (): Promise<string> => {
-    // 기존 사용자 확인
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('username', username)
-      .single()
-
-    if (existingUser) {
-      return existingUser.id
-    }
-
-    // 새 사용자 생성
-    const { data: newUser, error } = await supabase
-      .from('users')
-      .insert({ username })
-      .select('id')
-      .single()
-
-    if (error) throw error
-    return newUser.id
-  }
-
-  const loadPreviousMessages = async () => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .limit(100)
-
-    if (error) {
-      console.error('Error loading messages:', error)
-      return
-    }
-
-    setMessages(data || [])
-  }
-
-  const setupRealtimeSubscription = () => {
-    // 이전 채널 정리
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
-    }
-
-    // 새 실시간 채널 생성
-    const channel = supabase
-      .channel('chat-messages')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages'
-        },
-        (payload) => {
-          const newMessage = payload.new as Message
-          setMessages(prev => [...prev, newMessage])
-        }
-      )
-      .subscribe((status) => {
-        console.log('Realtime subscription status:', status)
-        setIsConnected(status === 'SUBSCRIBED')
-      })
-
-    channelRef.current = channel
-  }
-
-  const trackOnlineUser = async (userId: string) => {
-    // 간단한 온라인 사용자 추적 (실제로는 더 정교한 방법 필요)
-    // 현재는 최근 활동한 사용자 수로 근사치 계산
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-    
-    const { data } = await supabase
-      .from('messages')
-      .select('username')
-      .gte('created_at', fiveMinutesAgo)
-
-    if (data) {
-      const uniqueUsers = new Set(data.map(msg => msg.username))
-      setOnlineUsers(uniqueUsers.size)
     }
   }
 
@@ -159,26 +152,23 @@ export default function ChatPage() {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !currentUserId || !isConnected) return
+    if (message.trim() && isConnected) {
+      try {
+        const { error } = await supabase
+          .from('messages')
+          .insert([
+            {
+              content: message.trim(),
+              username: username,
+              user_id: currentUserId
+            }
+          ])
 
-    try {
-      const { error } = await supabase
-        .from('messages')
-        .insert({
-          content: message.trim(),
-          username: username,
-          user_id: currentUserId
-        })
-
-      if (error) throw error
-
-      setMessage('')
-      
-      // 온라인 사용자 수 업데이트
-      await trackOnlineUser(currentUserId)
-      
-    } catch (error) {
-      console.error('Error sending message:', error)
+        if (error) throw error
+        setMessage('')
+      } catch (error) {
+        console.error('Error sending message:', error)
+      }
     }
   }
 
@@ -195,7 +185,7 @@ export default function ChatPage() {
         <div className="retro-border p-6 md:p-8 w-full max-w-sm md:max-w-md relative">
           <div className="scanline"></div>
           <h1 className="text-xl md:text-2xl mb-6 text-center retro-glow typewriter">
-            SUPABASE_TERMINAL
+            TERMINAL_LOGIN
           </h1>
           
           <form onSubmit={handleUsernameSubmit} className="space-y-4 md:space-y-6">
@@ -221,15 +211,15 @@ export default function ChatPage() {
               disabled={isLoading}
               className="retro-button w-full text-xs md:text-sm py-3 md:py-4"
             >
-              {isLoading ? 'CONNECTING...' : 'CONNECT_TO_SUPABASE'}
+              {isLoading ? 'CONNECTING...' : 'CONNECT_TO_SYSTEM'}
             </button>
           </form>
           
           <div className="mt-4 md:mt-6 text-xs text-gray-500 space-y-1">
-            <p>&gt; Connection: Supabase Realtime</p>
-            <p>&gt; Protocol: WebSocket + PostgreSQL</p>
-            <p>&gt; Database: Supabase Cloud</p>
-            <p>&gt; Deployment: Vercel Compatible</p>
+            <p>&gt; Connection secured via Supabase</p>
+            <p>&gt; Protocol: WebSocket Realtime</p>
+            <p>&gt; Database: PostgreSQL Cloud</p>
+            <p>&gt; ⚡ Powered by Supabase + Vercel</p>
           </div>
         </div>
       </div>
@@ -249,13 +239,13 @@ export default function ChatPage() {
             
             <div className="flex items-center space-x-6">
               <div className="flex items-center space-x-2">
-                <span className="text-sm">ACTIVE_USERS:</span>
+                <span className="text-sm">USERS_ONLINE:</span>
                 <span className="text-yellow-400">{onlineUsers}</span>
               </div>
               
               <div className="flex items-center space-x-2">
                 <div className={`w-3 h-3 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                <span className="text-sm">{isConnected ? 'REALTIME' : 'CONNECTING'}</span>
+                <span className="text-sm">{isConnected ? 'CONNECTED' : 'DISCONNECTED'}</span>
               </div>
               
               <a href="/" className="retro-button text-xs py-1 px-3">
@@ -283,7 +273,7 @@ export default function ChatPage() {
               
               <div className="flex items-center space-x-2">
                 <div className={`w-2 h-2 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                <span>{isConnected ? 'REALTIME' : 'LOADING'}</span>
+                <span>{isConnected ? 'ONLINE' : 'OFFLINE'}</span>
               </div>
             </div>
           </div>
@@ -295,7 +285,7 @@ export default function ChatPage() {
         <div className="max-w-6xl mx-auto">
           <span className="text-xs md:text-sm">
             &gt; Logged in as: <span className="text-orange-400">{username}</span>
-            {!isConnected && <span className="text-red-400 ml-2">(Connecting to Supabase...)</span>}
+            <span className="text-green-400 ml-2">| Supabase Realtime</span>
           </span>
         </div>
       </div>
@@ -304,13 +294,10 @@ export default function ChatPage() {
       <div className="flex-1 max-w-6xl mx-auto w-full flex flex-col min-h-0">
         
         {/* Messages Area */}
-        <div 
-          ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3 bg-black bg-opacity-80 retro-border border-t-0 border-b-0"
-        >
+        <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3 bg-black bg-opacity-80 retro-border border-t-0 border-b-0">
           {isLoading ? (
             <div className="text-center text-gray-500 mt-4 md:mt-8 fade-in-up">
-              <p className="text-sm md:text-base">&gt; Connecting to Supabase Realtime...</p>
+              <p className="text-sm md:text-base">&gt; Connecting to Supabase...</p>
               <div className="mt-2">
                 <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1"></span>
                 <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1 delay-100"></span>
@@ -319,9 +306,9 @@ export default function ChatPage() {
             </div>
           ) : messages.length === 0 ? (
             <div className="text-center text-gray-500 mt-4 md:mt-8 fade-in-up">
-              <p className="text-sm md:text-base">&gt; Supabase Realtime ready...</p>
-              <p className="text-xs mt-2">&gt; Type your message below to begin communication</p>
-              <p className="text-xs mt-1 text-green-400">&gt; Messages are stored in PostgreSQL cloud database</p>
+              <p className="text-sm md:text-base">&gt; Terminal ready for input...</p>
+              <p className="text-xs mt-2">&gt; Powered by Supabase Realtime</p>
+              <p className="text-xs mt-1 text-green-400">&gt; Chat history synced across all devices</p>
             </div>
           ) : (
             messages.map((msg) => (
@@ -400,10 +387,10 @@ export default function ChatPage() {
             
             <div className="flex justify-between text-xs text-gray-500">
               <span className="hidden md:block">
-                &gt; Status: {isConnected ? 'Supabase Realtime Connected' : 'Connecting to database...'}
+                &gt; Status: {isConnected ? 'Supabase Connected' : 'Connecting...'}
               </span>
               <span className="md:hidden">
-                &gt; {isConnected ? 'Connected' : 'Loading...'}
+                &gt; {isConnected ? 'Connected' : 'Connecting...'}
               </span>
               <span>
                 &gt; {message.length}/500
