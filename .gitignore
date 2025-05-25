@@ -6,4 +6,3 @@ memory-bank/
 .env*
 dist/
 build/
-legacy-socketio/
