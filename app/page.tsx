@@ -62,17 +62,17 @@ export default function Home() {
             
             <div className="retro-border p-4 md:p-6 relative">
               <div className="scanline"></div>
-              <h3 className="text-lg md:text-xl mb-2 text-green-400">PROJECTS</h3>
+              <h3 className="text-lg md:text-xl mb-2 text-green-400">PATCH_SYSTEM</h3>
               <div className="flex items-center justify-center">
-                <div className="w-3 h-3 md:w-4 md:h-4 bg-orange-400 retro-pulse mr-2"></div>
-                <span className="text-sm md:text-base">READY</span>
+                <div className="w-3 h-3 md:w-4 md:h-4 bg-purple-400 retro-pulse mr-2"></div>
+                <span className="text-sm md:text-base">v1.4.0</span>
               </div>
             </div>
           </div>
         </section>
 
         {/* Navigation Cards */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 mb-8 md:mb-16">
+        <section className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 md:gap-8 mb-8 md:mb-16">
           
           {/* Authentication */}
           <Link href="/auth" className="block">
@@ -116,6 +116,27 @@ export default function Home() {
             </div>
           </Link>
 
+          {/* Patch Notes */}
+          <Link href="/patch-notes" className="block">
+            <div className="retro-border p-6 md:p-8 hover:bg-purple-400 hover:bg-opacity-10 transition-all duration-300 group relative overflow-hidden min-h-[200px] flex flex-col justify-between">
+              <div className="relative z-10">
+                <h3 className="text-xl md:text-2xl mb-4 text-purple-400 group-hover:text-black transition-colors">
+                  [PATCH_NOTES.EXE]
+                </h3>
+                <p className="text-gray-400 group-hover:text-gray-800 transition-colors mb-6 text-sm md:text-base">
+                  &gt; View development update history
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="retro-button text-xs md:text-sm px-4 md:px-6 py-2 md:py-3">VIEW_LOG</span>
+                  <span className="text-purple-400 group-hover:translate-x-2 transition-transform text-lg md:text-xl">
+                    📋
+                  </span>
+                </div>
+              </div>
+              <div className="absolute inset-0 bg-purple-400 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 opacity-20"></div>
+            </div>
+          </Link>
+
           {/* Projects */}
           <div className="retro-border p-6 md:p-8 hover:bg-orange-400 hover:bg-opacity-10 transition-all duration-300 group relative overflow-hidden cursor-pointer min-h-[200px] flex flex-col justify-between">
             <div className="relative z-10">
@@ -133,6 +154,23 @@ export default function Home() {
               </div>
             </div>
             <div className="absolute inset-0 bg-orange-400 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 opacity-20"></div>
+          </div>
+        </section>
+
+        {/* Recent Updates */}
+        <section className="retro-border p-4 md:p-6 mb-8 border-purple-400 bg-purple-400 bg-opacity-5">
+          <div className="text-center">
+            <h3 className="text-lg md:text-xl mb-3 text-purple-400 retro-glow">
+              🚀 LATEST UPDATE: v1.4.0
+            </h3>
+            <p className="text-sm md:text-base text-gray-400 mb-4">
+              패치노트 시스템 구현 및 동적 업데이트 로그 관리
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
+              <div>&gt; Dynamic Patch Management</div>
+              <div>&gt; Category-based Classification</div>
+              <div>&gt; Real-time Update Notifications</div>
+            </div>
           </div>
         </section>
 
@@ -156,12 +194,12 @@ export default function Home() {
         {/* Terminal Footer */}
         <section className="retro-border p-4 md:p-6 retro-flicker">
           <div className="text-xs md:text-sm space-y-1 md:space-y-2 break-all">
-            <p className="hidden sm:block">&gt; SYSTEM_INFO: Next.js 14.2.3 | Vercel Cloud Platform | Supabase Auth</p>
-            <p className="sm:hidden">&gt; SYSTEM: Next.js 14.2.3 + Auth</p>
-            <p>&gt; BUILD_STATUS: Deployment successful ✓ | Security: Enhanced</p>
+            <p className="hidden sm:block">&gt; SYSTEM_INFO: Next.js 14.2.3 | Vercel Cloud Platform | Supabase Database</p>
+            <p className="sm:hidden">&gt; SYSTEM: Next.js 14.2.3 + Auth + Patch</p>
+            <p>&gt; BUILD_STATUS: Deployment successful ✓ | Version: v1.4.0</p>
             <p className="hidden md:block">&gt; UPTIME: {new Date().toISOString()}</p>
             <p className="md:hidden">&gt; UPTIME: {new Date().toLocaleDateString()}</p>
-            <p>&gt; ACCESS_LEVEL: Authenticated Users | Security: SHA-256 Encrypted</p>
+            <p>&gt; FEATURES: Auth + Chat + Patch Notes | Security: Enhanced</p>
           </div>
         </section>
       </main>
