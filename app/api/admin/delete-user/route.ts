@@ -2,19 +2,30 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseUrl = 'https://vdiqoxxaiiwgqvmtwxxy.supabase.co'
-// 환경변수 우선, 없으면 하드코딩된 키 사용 (임시)
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaXFveHhhaWl3Z3F2bXR3eHh5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODE3NDQ4MCwiZXhwIjoyMDYzNzUwNDgwfQ.DAnYAU_5pC5kxJYP1Sq5fDvDn1W6fZGQq4RHy-OsM0s'
 
 export async function POST(request: NextRequest) {
   console.log('🚀 API 라우트 시작')
   
   try {
-    console.log('🔧 환경변수 체크:', { 
-      hasEnvKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      keyLength: supabaseServiceKey?.length,
+    // 환경변수 상태 체크
+    const envServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    console.log('🔧 환경변수 상태:', { 
+      hasEnvKey: !!envServiceKey,
+      envKeyLength: envServiceKey?.length,
       nodeEnv: process.env.NODE_ENV
     })
+
+    // 환경변수가 없는 경우 명확한 에러 메시지
+    if (!envServiceKey) {
+      console.error('❌ SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다')
+      return NextResponse.json(
+        { 
+          error: 'Supabase Service Role Key가 설정되지 않았습니다',
+          details: 'SUPABASE_SERVICE_ROLE_KEY 환경변수를 Vercel에서 설정해주세요'
+        },
+        { status: 500 }
+      )
+    }
 
     // 요청 바디 파싱
     console.log('📦 요청 바디 파싱 시작')
@@ -35,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     // 서비스 키로 클라이언트 생성 (RLS 우회 가능)
     console.log('🔧 Supabase 클라이언트 생성 시작')
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabaseAdmin = createClient(supabaseUrl, envServiceKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
