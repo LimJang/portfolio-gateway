@@ -2,18 +2,28 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseUrl = 'https://vdiqoxxaiiwgqvmtwxxy.supabase.co'
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// 서비스 키로 클라이언트 생성 (RLS 우회 가능)
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
-
+// 환경변수 체크를 런타임으로 이동
 export async function POST(request: NextRequest) {
   try {
+    // 환경변수 체크
+    if (!supabaseServiceKey) {
+      console.error('SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다.')
+      return NextResponse.json(
+        { error: 'Server configuration error. Please contact administrator.' },
+        { status: 500 }
+      )
+    }
+
+    // 서비스 키로 클라이언트 생성 (RLS 우회 가능)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+
     const { userId, adminId } = await request.json()
 
     if (!userId || !adminId) {
