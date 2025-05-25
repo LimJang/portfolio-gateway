@@ -409,43 +409,57 @@ export default function AdminPage() {
     }
   }
 
-  // 사용자 삭제 실행 (순차 삭제)
+  // 사용자 삭제 실행 (개선된 디버깅 버전)
   const confirmDeleteUser = async () => {
-    if (!selectedUser || !supabase) return
+    if (!selectedUser || !supabase) {
+      console.log('❌ 필수 조건 미충족:', { selectedUser, supabase: !!supabase })
+      return
+    }
     
+    console.log('🚀 사용자 삭제 시작:', selectedUser)
     setIsLoading(true)
 
     try {
       // 1. 먼저 해당 사용자의 메시지 삭제
-      const { error: messagesError } = await supabase
+      console.log('1️⃣ 메시지 삭제 시작...')
+      const { data: deletedMessages, error: messagesError } = await supabase
         .from('messages')
         .delete()
         .eq('user_id', selectedUser.id)
+
+      console.log('메시지 삭제 결과:', { deletedMessages, messagesError })
 
       if (messagesError) {
         throw new Error('메시지 삭제 실패: ' + messagesError.message)
       }
 
       // 2. 해당 사용자가 작성한 패치노트 삭제
-      const { error: patchesError } = await supabase
+      console.log('2️⃣ 패치노트 삭제 시작...')
+      const { data: deletedPatches, error: patchesError } = await supabase
         .from('patch_notes')
         .delete()
         .eq('author_id', selectedUser.id)
+
+      console.log('패치노트 삭제 결과:', { deletedPatches, patchesError })
 
       if (patchesError) {
         throw new Error('패치노트 삭제 실패: ' + patchesError.message)
       }
 
       // 3. 마지막으로 사용자 삭제
-      const { error: userError } = await supabase
+      console.log('3️⃣ 사용자 삭제 시작...')
+      const { data: deletedUser, error: userError } = await supabase
         .from('users')
         .delete()
         .eq('id', selectedUser.id)
+
+      console.log('사용자 삭제 결과:', { deletedUser, userError })
 
       if (userError) {
         throw new Error('사용자 삭제 실패: ' + userError.message)
       }
 
+      console.log('✅ 사용자 삭제 완료!')
       setMessage(`사용자 ${selectedUser.display_name} 및 관련 데이터 삭제 완료!`)
       setMessageType('success')
       setShowUserDeleteModal(false)
@@ -455,8 +469,9 @@ export default function AdminPage() {
       loadUsers()
       loadDashboardData()
     } catch (error) {
-      console.error('사용자 삭제 에러:', error)
-      setMessage('사용자 삭제 중 오류가 발생했습니다: ' + error)
+      console.error('❌ 사용자 삭제 에러:', error)
+      console.error('에러 상세:', JSON.stringify(error, null, 2))
+      setMessage(`사용자 삭제 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`)
       setMessageType('error')
     } finally {
       setIsLoading(false)
