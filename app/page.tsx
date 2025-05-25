@@ -137,6 +137,29 @@ export default function Home() {
             </div>
           </Link>
 
+          {/* Admin Tools - Only show to admin users -->
+          <div id="admin-card" style={{ display: 'none' }}>
+            <Link href="/admin" className="block">
+              <div className="retro-border p-6 md:p-8 hover:bg-red-400 hover:bg-opacity-10 transition-all duration-300 group relative overflow-hidden min-h-[200px] flex flex-col justify-between border-red-400">
+                <div className="relative z-10">
+                  <h3 className="text-xl md:text-2xl mb-4 text-red-400 group-hover:text-black transition-colors">
+                    [ADMIN_TOOLS.EXE]
+                  </h3>
+                  <p className="text-gray-400 group-hover:text-gray-800 transition-colors mb-6 text-sm md:text-base">
+                    &gt; System administration panel
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className="retro-button text-xs md:text-sm px-4 md:px-6 py-2 md:py-3 border-red-400 text-red-400">ADMIN_ACCESS</span>
+                    <span className="text-red-400 group-hover:translate-x-2 transition-transform text-lg md:text-xl">
+                      🔑
+                    </span>
+                  </div>
+                </div>
+                <div className="absolute inset-0 bg-red-400 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 opacity-20"></div>
+              </div>
+            </Link>
+          </div>
+
           {/* Projects */}
           <div className="retro-border p-6 md:p-8 hover:bg-orange-400 hover:bg-opacity-10 transition-all duration-300 group relative overflow-hidden cursor-pointer min-h-[200px] flex flex-col justify-between">
             <div className="relative z-10">
@@ -211,6 +234,27 @@ export default function Home() {
         <div className="absolute bottom-1/4 right-1/4 w-px h-px bg-orange-400 shadow-[0_0_25px_12px_rgba(255,165,0,0.3)] animate-pulse delay-2000"></div>
         <div className="absolute top-1/2 left-1/2 w-px h-px bg-purple-400 shadow-[0_0_30px_15px_rgba(128,0,128,0.3)] animate-pulse delay-3000"></div>
       </div>
+
+      {/* Admin Detection Script */}
+      <script dangerouslySetInnerHTML={{
+        __html: `
+          // Check if user is admin and show admin card
+          try {
+            const userSession = sessionStorage.getItem('auth_user');
+            if (userSession) {
+              const user = JSON.parse(userSession);
+              if (user.username && user.username.toLowerCase() === 'admin') {
+                const adminCard = document.getElementById('admin-card');
+                if (adminCard) {
+                  adminCard.style.display = 'block';
+                }
+              }
+            }
+          } catch (error) {
+            console.log('Admin check failed:', error);
+          }
+        `
+      }} />
     </div>
   )
 }

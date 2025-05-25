@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 // Supabase 관련 타입 정의
 interface Message {
@@ -32,6 +33,11 @@ export default function ChatPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<any>(null)
   const router = useRouter()
+
+  // 관리자 체크
+  const isAdmin = (user: AuthUser): boolean => {
+    return user.username.toLowerCase() === 'admin'
+  }
 
   // 자동 스크롤
   const scrollToBottom = () => {
@@ -286,7 +292,7 @@ export default function ChatPage() {
             SECURE_CHAT.EXE
           </h1>
           
-          <div className="flex items-center space-x-4 md:space-x-6">
+          <div className="flex items-center space-x-2 md:space-x-4 flex-wrap">
             <div className="flex items-center space-x-2">
               <span className="text-xs md:text-sm">USERS:</span>
               <span className="text-yellow-400">{onlineUsers}</span>
@@ -296,6 +302,17 @@ export default function ChatPage() {
               <div className={`w-2 h-2 md:w-3 md:h-3 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
               <span className="text-xs md:text-sm">{isConnected ? 'SECURE' : 'CONNECTING'}</span>
             </div>
+
+            {/* Admin Tools - Only show to admin */}
+            {isAdmin(authUser) && (
+              <Link href="/admin" className="retro-button text-xs py-1 px-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black">
+                🔑 ADMIN_TOOLS
+              </Link>
+            )}
+            
+            <Link href="/" className="retro-button text-xs py-1 px-3">
+              HOME
+            </Link>
             
             <button 
               onClick={handleLogout}
@@ -313,6 +330,7 @@ export default function ChatPage() {
           <span className="text-xs md:text-sm">
             &gt; Authenticated as: <span className="text-orange-400">{authUser.displayName}</span>
             <span className="text-gray-500 ml-2">(@{authUser.username})</span>
+            {isAdmin(authUser) && <span className="text-red-400 ml-2">👑 ADMIN</span>}
           </span>
           <span className="text-xs text-gray-500">
             &gt; Session: {new Date(authUser.loginTime).toLocaleTimeString('ko-KR')}
@@ -355,6 +373,7 @@ export default function ChatPage() {
                         <span className={msg.username === authUser.username ? 'text-orange-400' : 'text-green-400'}>
                           {msg.display_name}
                           <span className="text-gray-500 ml-1 text-xs">@{msg.username}</span>
+                          {msg.username === 'admin' && <span className="text-red-400 ml-1 text-xs">👑</span>}
                         </span>
                       )}
                     </span>
