@@ -7,71 +7,113 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaXFveHhhaWl3Z3F2bXR3eHh5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODE3NDQ4MCwiZXhwIjoyMDYzNzUwNDgwfQ.DAnYAU_5pC5kxJYP1Sq5fDvDn1W6fZGQq4RHy-OsM0s'
 
 export async function POST(request: NextRequest) {
+  console.log('🚀 API 라우트 시작')
+  
   try {
     console.log('🔧 환경변수 체크:', { 
       hasEnvKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      keyLength: supabaseServiceKey?.length 
+      keyLength: supabaseServiceKey?.length,
+      nodeEnv: process.env.NODE_ENV
     })
 
-    // 서비스 키로 클라이언트 생성 (RLS 우회 가능)
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
-
-    const { userId, adminId } = await request.json()
+    // 요청 바디 파싱
+    console.log('📦 요청 바디 파싱 시작')
+    const body = await request.json()
+    console.log('📦 파싱된 요청 데이터:', body)
+    
+    const { userId, adminId } = body
 
     if (!userId || !adminId) {
+      console.log('❌ 필수 파라미터 누락:', { userId: !!userId, adminId: !!adminId })
       return NextResponse.json(
         { error: '필수 파라미터가 누락되었습니다' },
         { status: 400 }
       )
     }
 
+    console.log('✅ 필수 파라미터 확인 완료:', { userId, adminId })
+
+    // 서비스 키로 클라이언트 생성 (RLS 우회 가능)
+    console.log('🔧 Supabase 클라이언트 생성 시작')
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+    console.log('✅ Supabase 클라이언트 생성 완료')
+
     console.log('🔧 서버사이드 사용자 삭제 시작:', { userId, adminId })
 
     // 관리자 권한 확인 - 디버깅 추가
     console.log('🔍 관리자 권한 검증 시작...')
-    const { data: adminUser, error: adminError } = await supabaseAdmin
+    
+    const adminQuery = supabaseAdmin
       .from('users')
       .select('id, username, display_name')
       .eq('id', adminId)
       .single()
+    
+    console.log('🔍 관리자 쿼리 생성 완료, 실행 중...')
+    
+    const { data: adminUser, error: adminError } = await adminQuery
 
-    console.log('관리자 조회 결과:', { adminUser, adminError })
+    console.log('🔍 관리자 조회 완료')
+    console.log('관리자 조회 결과 - data:', adminUser)
+    console.log('관리자 조회 결과 - error:', adminError)
 
     if (adminError) {
-      console.error('관리자 조회 에러:', adminError)
+      console.error('❌ 관리자 조회 에러 상세:', {
+        message: adminError.message,
+        details: adminError.details,
+        hint: adminError.hint,
+        code: adminError.code
+      })
       return NextResponse.json(
-        { error: '관리자 정보를 조회할 수 없습니다: ' + adminError.message },
+        { 
+          error: '관리자 정보를 조회할 수 없습니다',
+          details: adminError.message,
+          code: adminError.code 
+        },
         { status: 403 }
       )
     }
 
     if (!adminUser) {
-      console.error('관리자 사용자를 찾을 수 없음')
+      console.error('❌ 관리자 사용자를 찾을 수 없음 - adminUser is null/undefined')
       return NextResponse.json(
         { error: '관리자 사용자를 찾을 수 없습니다' },
         { status: 403 }
       )
     }
 
+    console.log('✅ 관리자 사용자 찾음:', {
+      id: adminUser.id,
+      username: adminUser.username,
+      display_name: adminUser.display_name
+    })
+
     // username이 admin인지 확인 (대소문자 무시)
     const isAdminUser = adminUser.username?.toLowerCase() === 'admin'
-    console.log('관리자 권한 체크:', { 
-      username: adminUser.username, 
+    console.log('🔍 관리자 권한 체크:', { 
+      username: adminUser.username,
+      username_lower: adminUser.username?.toLowerCase(),
       isAdmin: isAdminUser 
     })
 
     if (!isAdminUser) {
-      console.error('관리자 권한 없음:', adminUser.username)
+      console.error('❌ 관리자 권한 없음:', {
+        expected: 'admin',
+        actual: adminUser.username,
+        actualLower: adminUser.username?.toLowerCase()
+      })
       return NextResponse.json(
         { error: `권한이 없습니다. 현재 사용자: ${adminUser.username}` },
         { status: 403 }
       )
     }
+
+    console.log('✅ 관리자 권한 검증 완료!')
 
     // 삭제 대상 사용자 확인
     console.log('🔍 삭제 대상 사용자 확인...')
@@ -84,6 +126,7 @@ export async function POST(request: NextRequest) {
     console.log('삭제 대상 조회 결과:', { targetUser, targetError })
 
     if (targetError) {
+      console.error('❌ 삭제 대상 조회 에러:', targetError)
       return NextResponse.json(
         { error: '삭제 대상 사용자를 찾을 수 없습니다: ' + targetError.message },
         { status: 404 }
@@ -91,6 +134,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (targetUser.username === 'admin') {
+      console.error('❌ 관리자 계정 삭제 시도 차단')
       return NextResponse.json(
         { error: '관리자 계정은 삭제할 수 없습니다' },
         { status: 400 }
@@ -107,9 +151,10 @@ export async function POST(request: NextRequest) {
       .eq('user_id', userId)
 
     if (messagesError) {
-      console.error('메시지 삭제 실패:', messagesError)
+      console.error('❌ 메시지 삭제 실패:', messagesError)
       throw new Error('메시지 삭제 실패: ' + messagesError.message)
     }
+    console.log('✅ 메시지 삭제 완료')
 
     // 2. 패치노트 삭제
     console.log('2️⃣ 서버: 패치노트 삭제 시작...')
@@ -119,9 +164,10 @@ export async function POST(request: NextRequest) {
       .eq('author_id', userId)
 
     if (patchesError) {
-      console.error('패치노트 삭제 실패:', patchesError)
+      console.error('❌ 패치노트 삭제 실패:', patchesError)
       throw new Error('패치노트 삭제 실패: ' + patchesError.message)
     }
+    console.log('✅ 패치노트 삭제 완료')
 
     // 3. 사용자 삭제
     console.log('3️⃣ 서버: 사용자 삭제 시작...')
@@ -131,11 +177,12 @@ export async function POST(request: NextRequest) {
       .eq('id', userId)
 
     if (userError) {
-      console.error('사용자 삭제 실패:', userError)
+      console.error('❌ 사용자 삭제 실패:', userError)
       throw new Error('사용자 삭제 실패: ' + userError.message)
     }
+    console.log('✅ 사용자 삭제 완료')
 
-    console.log('✅ 서버: 사용자 삭제 완료!')
+    console.log('🎉 서버: 전체 사용자 삭제 완료!')
 
     return NextResponse.json({
       success: true,
@@ -143,7 +190,11 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ 서버: 사용자 삭제 에러:', error)
+    console.error('❌ 서버: 사용자 삭제 에러 상세:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      error: error
+    })
     return NextResponse.json(
       { 
         error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다',

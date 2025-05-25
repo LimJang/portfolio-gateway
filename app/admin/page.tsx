@@ -417,7 +417,7 @@ export default function AdminPage() {
     }
     
     console.log('🚀 API를 통한 사용자 삭제 시작:', selectedUser.id)
-    console.log('🔑 관리자 정보:', authUser)
+    console.log('🔑 관리자 정보 상세:', JSON.stringify(authUser, null, 2))
     setIsLoading(true)
 
     try {
@@ -426,7 +426,7 @@ export default function AdminPage() {
         adminId: authUser.id
       }
       
-      console.log('📦 요청 데이터:', requestBody)
+      console.log('📦 요청 데이터 상세:', JSON.stringify(requestBody, null, 2))
       
       const response = await fetch('/api/admin/delete-user', {
         method: 'POST',
@@ -439,7 +439,7 @@ export default function AdminPage() {
       const result = await response.json()
       
       console.log('📨 응답 상태:', response.status)
-      console.log('📨 응답 데이터:', result)
+      console.log('📨 응답 데이터 상세:', JSON.stringify(result, null, 2))
 
       if (!response.ok) {
         throw new Error(result.error || '사용자 삭제 중 오류가 발생했습니다')
@@ -455,7 +455,7 @@ export default function AdminPage() {
       loadUsers()
       loadDashboardData()
     } catch (error) {
-      console.error('❌ API 호출 에러:', error)
+      console.error('❌ API 호출 에러 상세:', error)
       setMessage(`사용자 삭제 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`)
       setMessageType('error')
     } finally {
