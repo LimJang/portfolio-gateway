@@ -138,7 +138,7 @@ export default function ChatPage() {
       }
 
       // 메시지 데이터 변환
-      const formattedMessages = data?.map(msg => ({
+      const formattedMessages = data?.map((msg: any) => ({
         ...msg,
         display_name: msg.users?.display_name || msg.username
       })) || []
@@ -344,7 +344,7 @@ export default function ChatPage() {
               <p className="text-xs mt-1 text-green-400">&gt; All messages are encrypted and stored securely</p>
             </div>
           ) : (
-            messages.map((msg) => (
+            messages.map((msg: Message) => (
               <div key={msg.id} className="fade-in-up">
                 <div className={`retro-message ${msg.username === authUser.username ? 'user' : ''} text-sm md:text-base`}>
                   <div className="flex justify-between items-start mb-1 md:mb-2">
