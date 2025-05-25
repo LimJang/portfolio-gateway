@@ -27,6 +27,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [supabase, setSupabase] = useState<any>(null)
+  const [debugInfo, setDebugInfo] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<any>(null)
@@ -44,16 +45,46 @@ export default function ChatPage() {
   useEffect(() => {
     const initializeSupabase = async () => {
       try {
-        const { createClient } = await import('@supabase/supabase-js')
+        setDebugInfo('환경변수 확인 중...')
         
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        
+        console.log('Environment check:', {
+          url: supabaseUrl ? 'Found' : 'Missing',
+          key: supabaseAnonKey ? 'Found' : 'Missing',
+          urlValue: supabaseUrl,
+          keyValue: supabaseAnonKey ? supabaseAnonKey.substring(0, 20) + '...' : 'Missing'
+        })
         
         if (!supabaseUrl || !supabaseAnonKey) {
-          console.error('Supabase credentials not found')
+          const errorMsg = `환경변수 누락: URL=${supabaseUrl ? 'OK' : 'Missing'}, KEY=${supabaseAnonKey ? 'OK' : 'Missing'}`
+          setDebugInfo(errorMsg)
+          console.error('Supabase credentials not found:', errorMsg)
+          
+          // 하드코딩으로 테스트
+          const hardcodedUrl = 'https://vdiqoxxaiiwgqvmtwxxy.supabase.co'
+          const hardcodedKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaXFveHhhaWl3Z3F2bXR3eHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxNzQ0ODAsImV4cCI6MjA2Mzc1MDQ4MH0.ZxwDHCADi5Q5jxJt6Isjik5j_AmalQE2wYH7SvPpHDA'
+          
+          setDebugInfo('하드코딩된 환경변수 사용 중...')
+          
+          const { createClient } = await import('@supabase/supabase-js')
+          const client = createClient(hardcodedUrl, hardcodedKey, {
+            realtime: {
+              params: {
+                eventsPerSecond: 10
+              }
+            }
+          })
+          
+          setSupabase(client)
+          setDebugInfo('Supabase 연결 성공!')
           return
         }
 
+        setDebugInfo('Supabase 클라이언트 생성 중...')
+        const { createClient } = await import('@supabase/supabase-js')
+        
         const client = createClient(supabaseUrl, supabaseAnonKey, {
           realtime: {
             params: {
@@ -63,7 +94,10 @@ export default function ChatPage() {
         })
 
         setSupabase(client)
+        setDebugInfo('Supabase 연결 성공!')
       } catch (error) {
+        const errorMsg = `Supabase 초기화 실패: ${error}`
+        setDebugInfo(errorMsg)
         console.error('Failed to initialize Supabase:', error)
       }
     }
@@ -253,6 +287,7 @@ export default function ChatPage() {
             INITIALIZING_SUPABASE...
           </h1>
           <div className="text-center">
+            <p className="text-xs text-yellow-400 mb-4">&gt; {debugInfo}</p>
             <div className="mt-4">
               <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1"></span>
               <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1 delay-100"></span>
@@ -301,7 +336,7 @@ export default function ChatPage() {
           </form>
           
           <div className="mt-4 md:mt-6 text-xs text-gray-500 space-y-1">
-            <p>&gt; Connection: Supabase Realtime</p>
+            <p>&gt; Status: {debugInfo}</p>
             <p>&gt; Protocol: WebSocket + PostgreSQL</p>
             <p>&gt; Database: Supabase Cloud</p>
             <p>&gt; Deployment: Vercel Compatible</p>

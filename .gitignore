@@ -7,3 +7,4 @@ memory-bank/
 dist/
 build/
 legacy-socketio/
+.vercel
