@@ -409,85 +409,36 @@ export default function AdminPage() {
     }
   }
 
-  // 사용자 삭제 실행 (RLS 정책 우회 시도)
+  // 사용자 삭제 실행 (API 라우트 호출)
   const confirmDeleteUser = async () => {
-    if (!selectedUser || !supabase) {
-      console.log('❌ 필수 조건 미충족:', { selectedUser, supabase: !!supabase })
+    if (!selectedUser || !authUser) {
+      console.log('❌ 필수 조건 미충족:', { selectedUser, authUser })
       return
     }
     
-    console.log('🚀 사용자 삭제 시작:', selectedUser)
+    console.log('🚀 API를 통한 사용자 삭제 시작:', selectedUser.id)
     setIsLoading(true)
 
     try {
-      // 0. 먼저 각 테이블에서 해당 데이터가 실제로 존재하는지 확인
-      console.log('🔍 데이터 존재 여부 확인...')
-      
-      const [checkMessages, checkPatches, checkUser] = await Promise.all([
-        supabase.from('messages').select('id').eq('user_id', selectedUser.id),
-        supabase.from('patch_notes').select('id').eq('author_id', selectedUser.id),
-        supabase.from('users').select('id').eq('id', selectedUser.id)
-      ])
-      
-      console.log('존재 확인 결과:', {
-        messages: checkMessages.data?.length || 0,
-        patches: checkPatches.data?.length || 0,
-        user: checkUser.data?.length || 0
+      const response = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          adminId: authUser.id
+        }),
       })
 
-      // 1. 먼저 해당 사용자의 메시지 삭제
-      console.log('1️⃣ 메시지 삭제 시작...')
-      const { data: deletedMessages, error: messagesError, count: messagesCount } = await supabase
-        .from('messages')
-        .delete()
-        .eq('user_id', selectedUser.id)
-        .select()
+      const result = await response.json()
 
-      console.log('메시지 삭제 결과:', { deletedMessages, messagesError, messagesCount })
-
-      if (messagesError) {
-        console.error('메시지 삭제 에러 상세:', messagesError)
-        throw new Error('메시지 삭제 실패: ' + messagesError.message)
+      if (!response.ok) {
+        throw new Error(result.error || '사용자 삭제 중 오류가 발생했습니다')
       }
 
-      // 2. 해당 사용자가 작성한 패치노트 삭제
-      console.log('2️⃣ 패치노트 삭제 시작...')
-      const { data: deletedPatches, error: patchesError, count: patchesCount } = await supabase
-        .from('patch_notes')
-        .delete()
-        .eq('author_id', selectedUser.id)
-        .select()
-
-      console.log('패치노트 삭제 결과:', { deletedPatches, patchesError, patchesCount })
-
-      if (patchesError) {
-        console.error('패치노트 삭제 에러 상세:', patchesError)
-        throw new Error('패치노트 삭제 실패: ' + patchesError.message)
-      }
-
-      // 3. 마지막으로 사용자 삭제
-      console.log('3️⃣ 사용자 삭제 시작...')
-      const { data: deletedUser, error: userError, count: userCount } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', selectedUser.id)
-        .select()
-
-      console.log('사용자 삭제 결과:', { deletedUser, userError, userCount })
-
-      if (userError) {
-        console.error('사용자 삭제 에러 상세:', userError)
-        throw new Error('사용자 삭제 실패: ' + userError.message)
-      }
-
-      // 삭제 결과 검증
-      if (!deletedUser || deletedUser.length === 0) {
-        console.warn('⚠️ 사용자가 삭제되지 않았습니다. RLS 정책 문제일 가능성이 높습니다.')
-        throw new Error('사용자 삭제 실패: RLS 정책으로 인한 권한 제한 또는 데이터가 존재하지 않음')
-      }
-
-      console.log('✅ 사용자 삭제 완료!')
-      setMessage(`사용자 ${selectedUser.display_name} 및 관련 데이터 삭제 완료!`)
+      console.log('✅ API 호출 성공:', result)
+      setMessage(result.message || `사용자 ${selectedUser.display_name} 및 관련 데이터 삭제 완료!`)
       setMessageType('success')
       setShowUserDeleteModal(false)
       setSelectedUser(null)
@@ -496,8 +447,7 @@ export default function AdminPage() {
       loadUsers()
       loadDashboardData()
     } catch (error) {
-      console.error('❌ 사용자 삭제 에러:', error)
-      console.error('에러 상세:', JSON.stringify(error, null, 2))
+      console.error('❌ API 호출 에러:', error)
       setMessage(`사용자 삭제 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`)
       setMessageType('error')
     } finally {
