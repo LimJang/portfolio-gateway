@@ -12,6 +12,9 @@ export default function Home() {
           <div className="flex items-center space-x-2 md:space-x-4">
             <div className="w-2 h-2 md:w-3 md:h-3 bg-green-400 retro-pulse"></div>
             <span className="text-xs md:text-sm">SYSTEM_ONLINE</span>
+            <Link href="/auth" className="retro-button text-xs py-1 px-3 ml-4">
+              LOGIN
+            </Link>
           </div>
         </div>
       </header>
@@ -24,18 +27,27 @@ export default function Home() {
               &gt; WELCOME TO THE MATRIX_
             </h2>
             <p className="text-sm md:text-lg text-gray-400 mb-6 md:mb-8 px-4">
-              Real-time communication hub and project navigation system
+              Authenticated real-time communication hub and project navigation system
             </p>
           </div>
 
           {/* Status Indicators */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-12">
             <div className="retro-border p-4 md:p-6 relative">
               <div className="scanline"></div>
               <h3 className="text-lg md:text-xl mb-2 text-green-400">SERVER_STATUS</h3>
               <div className="flex items-center justify-center">
                 <div className="w-3 h-3 md:w-4 md:h-4 bg-green-400 retro-pulse mr-2"></div>
                 <span className="text-sm md:text-base">ONLINE</span>
+              </div>
+            </div>
+            
+            <div className="retro-border p-4 md:p-6 relative">
+              <div className="scanline"></div>
+              <h3 className="text-lg md:text-xl mb-2 text-blue-400">AUTH_SYSTEM</h3>
+              <div className="flex items-center justify-center">
+                <div className="w-3 h-3 md:w-4 md:h-4 bg-blue-400 retro-pulse mr-2"></div>
+                <span className="text-sm md:text-base">SECURE</span>
               </div>
             </div>
             
@@ -48,7 +60,7 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="retro-border p-4 md:p-6 relative sm:col-span-2 md:col-span-1">
+            <div className="retro-border p-4 md:p-6 relative">
               <div className="scanline"></div>
               <h3 className="text-lg md:text-xl mb-2 text-green-400">PROJECTS</h3>
               <div className="flex items-center justify-center">
@@ -60,20 +72,43 @@ export default function Home() {
         </section>
 
         {/* Navigation Cards */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-8 md:mb-16">
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 mb-8 md:mb-16">
+          
+          {/* Authentication */}
+          <Link href="/auth" className="block">
+            <div className="retro-border p-6 md:p-8 hover:bg-blue-400 hover:bg-opacity-10 transition-all duration-300 group relative overflow-hidden min-h-[200px] flex flex-col justify-between">
+              <div className="relative z-10">
+                <h3 className="text-xl md:text-2xl mb-4 text-blue-400 group-hover:text-black transition-colors">
+                  [AUTH_LOGIN.EXE]
+                </h3>
+                <p className="text-gray-400 group-hover:text-gray-800 transition-colors mb-6 text-sm md:text-base">
+                  &gt; Secure user authentication system
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="retro-button text-xs md:text-sm px-4 md:px-6 py-2 md:py-3">ACCESS</span>
+                  <span className="text-blue-400 group-hover:translate-x-2 transition-transform text-lg md:text-xl">
+                    🔐
+                  </span>
+                </div>
+              </div>
+              <div className="absolute inset-0 bg-blue-400 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 opacity-20"></div>
+            </div>
+          </Link>
+
+          {/* Chat Room */}
           <Link href="/chat" className="block">
             <div className="retro-border p-6 md:p-8 hover:bg-green-400 hover:bg-opacity-10 transition-all duration-300 group relative overflow-hidden min-h-[200px] flex flex-col justify-between">
               <div className="relative z-10">
                 <h3 className="text-xl md:text-2xl mb-4 text-green-400 group-hover:text-black transition-colors">
-                  [CHAT_ROOM.EXE]
+                  [SECURE_CHAT.EXE]
                 </h3>
                 <p className="text-gray-400 group-hover:text-gray-800 transition-colors mb-6 text-sm md:text-base">
-                  &gt; Initialize real-time communication protocol
+                  &gt; Authenticated real-time communication
                 </p>
                 <div className="flex items-center justify-between">
                   <span className="retro-button text-xs md:text-sm px-4 md:px-6 py-2 md:py-3">EXECUTE</span>
                   <span className="text-green-400 group-hover:translate-x-2 transition-transform text-lg md:text-xl">
-                    →
+                    💬
                   </span>
                 </div>
               </div>
@@ -81,6 +116,7 @@ export default function Home() {
             </div>
           </Link>
 
+          {/* Projects */}
           <div className="retro-border p-6 md:p-8 hover:bg-orange-400 hover:bg-opacity-10 transition-all duration-300 group relative overflow-hidden cursor-pointer min-h-[200px] flex flex-col justify-between">
             <div className="relative z-10">
               <h3 className="text-xl md:text-2xl mb-4 text-orange-400 group-hover:text-black transition-colors">
@@ -92,7 +128,7 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <span className="retro-button text-xs md:text-sm px-4 md:px-6 py-2 md:py-3">BROWSE</span>
                 <span className="text-orange-400 group-hover:translate-x-2 transition-transform text-lg md:text-xl">
-                  →
+                  📁
                 </span>
               </div>
             </div>
@@ -100,24 +136,42 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Security Notice */}
+        <section className="retro-border p-4 md:p-6 mb-8 border-blue-400 bg-blue-400 bg-opacity-5">
+          <div className="text-center">
+            <h3 className="text-lg md:text-xl mb-3 text-blue-400 retro-glow">
+              🔐 SECURITY ENHANCED
+            </h3>
+            <p className="text-sm md:text-base text-gray-400 mb-4">
+              All chat communications now require user authentication
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
+              <div>&gt; SHA-256 Password Encryption</div>
+              <div>&gt; Session-based Authentication</div>
+              <div>&gt; Secure Database Storage</div>
+            </div>
+          </div>
+        </section>
+
         {/* Terminal Footer */}
         <section className="retro-border p-4 md:p-6 retro-flicker">
           <div className="text-xs md:text-sm space-y-1 md:space-y-2 break-all">
-            <p className="hidden sm:block">&gt; SYSTEM_INFO: Next.js 14.2.3 | Vercel Cloud Platform</p>
-            <p className="sm:hidden">&gt; SYSTEM: Next.js 14.2.3</p>
-            <p>&gt; BUILD_STATUS: Deployment successful ✓</p>
+            <p className="hidden sm:block">&gt; SYSTEM_INFO: Next.js 14.2.3 | Vercel Cloud Platform | Supabase Auth</p>
+            <p className="sm:hidden">&gt; SYSTEM: Next.js 14.2.3 + Auth</p>
+            <p>&gt; BUILD_STATUS: Deployment successful ✓ | Security: Enhanced</p>
             <p className="hidden md:block">&gt; UPTIME: {new Date().toISOString()}</p>
             <p className="md:hidden">&gt; UPTIME: {new Date().toLocaleDateString()}</p>
-            <p>&gt; ACCESS_LEVEL: Public | Security: Standard</p>
+            <p>&gt; ACCESS_LEVEL: Authenticated Users | Security: SHA-256 Encrypted</p>
           </div>
         </section>
       </main>
 
-      {/* Background Effects - 모바일에서는 더 적게 */}
+      {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-px h-px bg-green-400 shadow-[0_0_20px_10px_rgba(0,255,65,0.3)] animate-pulse"></div>
-        <div className="hidden md:block absolute top-3/4 right-1/3 w-px h-px bg-orange-400 shadow-[0_0_15px_8px_rgba(255,107,53,0.3)] animate-pulse delay-1000"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-px h-px bg-yellow-400 shadow-[0_0_25px_12px_rgba(255,255,0,0.3)] animate-pulse delay-2000"></div>
+        <div className="hidden md:block absolute top-3/4 right-1/3 w-px h-px bg-blue-400 shadow-[0_0_15px_8px_rgba(0,100,255,0.3)] animate-pulse delay-1000"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-px h-px bg-orange-400 shadow-[0_0_25px_12px_rgba(255,165,0,0.3)] animate-pulse delay-2000"></div>
+        <div className="absolute top-1/2 left-1/2 w-px h-px bg-purple-400 shadow-[0_0_30px_15px_rgba(128,0,128,0.3)] animate-pulse delay-3000"></div>
       </div>
     </div>
   )

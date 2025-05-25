@@ -1,36 +1,37 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 
 // Supabase 관련 타입 정의
 interface Message {
   id: string
   content: string
   username: string
+  display_name: string
   created_at: string
   user_id?: string
 }
 
-interface User {
+interface AuthUser {
   id: string
   username: string
-  created_at: string
+  displayName: string
+  loginTime: string
 }
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [message, setMessage] = useState('')
-  const [username, setUsername] = useState('')
-  const [usernameInput, setUsernameInput] = useState('')
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState(0)
-  const [isLoading, setIsLoading] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [supabase, setSupabase] = useState<any>(null)
-  const [debugInfo, setDebugInfo] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<any>(null)
+  const router = useRouter()
 
   // 자동 스크롤
   const scrollToBottom = () => {
@@ -41,49 +42,36 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
-  // 사용자명 영문/숫자 변환 함수
-  const sanitizeUsername = (input: string): string => {
-    return input.replace(/[^a-zA-Z0-9]/g, '').substring(0, 15) || 'user' + Date.now()
-  }
+  // 인증 체크
+  useEffect(() => {
+    const checkAuth = () => {
+      try {
+        const userSession = sessionStorage.getItem('auth_user')
+        if (!userSession) {
+          router.push('/auth')
+          return
+        }
+
+        const user = JSON.parse(userSession)
+        setAuthUser(user)
+      } catch (error) {
+        console.error('Auth check error:', error)
+        router.push('/auth')
+      }
+    }
+
+    checkAuth()
+  }, [router])
 
   // Supabase 클라이언트 초기화
   useEffect(() => {
     const initializeSupabase = async () => {
       try {
-        setDebugInfo('환경변수 확인 중...')
-        
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        
-        console.log('Environment check:', {
-          url: supabaseUrl ? 'Found' : 'Missing',
-          key: supabaseAnonKey ? 'Found' : 'Missing'
-        })
-        
-        if (!supabaseUrl || !supabaseAnonKey) {
-          const hardcodedUrl = 'https://vdiqoxxaiiwgqvmtwxxy.supabase.co'
-          const hardcodedKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaXFveHhhaWl3Z3F2bXR3eHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxNzQ0ODAsImV4cCI6MjA2Mzc1MDQ4MH0.ZxwDHCADi5Q5jxJt6Isjik5j_AmalQE2wYH7SvPpHDA'
-          
-          setDebugInfo('하드코딩된 환경변수 사용 중...')
-          
-          const { createClient } = await import('@supabase/supabase-js')
-          const client = createClient(hardcodedUrl, hardcodedKey, {
-            realtime: {
-              params: {
-                eventsPerSecond: 10
-              }
-            }
-          })
-          
-          setSupabase(client)
-          setDebugInfo('Supabase 연결 성공!')
-          return
-        }
-
-        setDebugInfo('Supabase 클라이언트 생성 중...')
         const { createClient } = await import('@supabase/supabase-js')
+        const url = 'https://vdiqoxxaiiwgqvmtwxxy.supabase.co'
+        const key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaXFveHhhaWl3Z3F2bXR3eHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxNzQ0ODAsImV4cCI6MjA2Mzc1MDQ4MH0.ZxwDHCADi5Q5jxJt6Isjik5j_AmalQE2wYH7SvPpHDA'
         
-        const client = createClient(supabaseUrl, supabaseAnonKey, {
+        const client = createClient(url, key, {
           realtime: {
             params: {
               eventsPerSecond: 10
@@ -92,10 +80,7 @@ export default function ChatPage() {
         })
 
         setSupabase(client)
-        setDebugInfo('Supabase 연결 성공!')
       } catch (error) {
-        const errorMsg = `Supabase 초기화 실패: ${error}`
-        setDebugInfo(errorMsg)
         console.error('Failed to initialize Supabase:', error)
       }
     }
@@ -105,30 +90,21 @@ export default function ChatPage() {
 
   // 채팅 초기화
   useEffect(() => {
-    if (username && supabase) {
+    if (authUser && supabase) {
       initializeChat()
     }
-
-    return () => {
-      if (channelRef.current && supabase) {
-        supabase.removeChannel(channelRef.current)
-      }
-    }
-  }, [username, supabase])
+  }, [authUser, supabase])
 
   const initializeChat = async () => {
-    if (!supabase) return
+    if (!supabase || !authUser) return
 
     try {
       setIsLoading(true)
       setIsConnected(false)
 
-      const userId = await registerOrGetUser()
-      setCurrentUserId(userId)
-
       await loadPreviousMessages()
       setupRealtimeSubscription()
-      await trackOnlineUser(userId)
+      await trackOnlineUser()
 
       setIsConnected(true)
       setIsLoading(false)
@@ -139,52 +115,20 @@ export default function ChatPage() {
     }
   }
 
-  const registerOrGetUser = async (): Promise<string> => {
-    if (!supabase) throw new Error('Supabase not initialized')
-
-    try {
-      const { data: existingUser, error: selectError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('username', username)
-        .maybeSingle()
-
-      if (selectError) {
-        console.error('Error checking existing user:', selectError)
-      }
-
-      if (existingUser) {
-        console.log('Found existing user:', existingUser.id)
-        return existingUser.id
-      }
-
-      console.log('Creating new user:', username)
-      const { data: newUser, error: insertError } = await supabase
-        .from('users')
-        .insert([{ username }])
-        .select('id')
-        .single()
-
-      if (insertError) {
-        console.error('Error creating user:', insertError)
-        throw insertError
-      }
-
-      console.log('Created new user:', newUser.id)
-      return newUser.id
-    } catch (error) {
-      console.error('registerOrGetUser error:', error)
-      return 'temp_' + Date.now()
-    }
-  }
-
   const loadPreviousMessages = async () => {
     if (!supabase) return
 
     try {
       const { data, error } = await supabase
         .from('messages')
-        .select('*')
+        .select(`
+          id,
+          content,
+          username,
+          created_at,
+          user_id,
+          users!messages_user_id_fkey(display_name)
+        `)
         .order('created_at', { ascending: true })
         .limit(100)
 
@@ -193,7 +137,13 @@ export default function ChatPage() {
         return
       }
 
-      setMessages(data || [])
+      // 메시지 데이터 변환
+      const formattedMessages = data?.map(msg => ({
+        ...msg,
+        display_name: msg.users?.display_name || msg.username
+      })) || []
+
+      setMessages(formattedMessages)
     } catch (error) {
       console.error('loadPreviousMessages error:', error)
     }
@@ -208,7 +158,7 @@ export default function ChatPage() {
       }
 
       const channel = supabase
-        .channel('chat-messages')
+        .channel('auth-chat-messages')
         .on(
           'postgres_changes',
           {
@@ -216,9 +166,22 @@ export default function ChatPage() {
             schema: 'public',
             table: 'messages'
           },
-          (payload: any) => {
-            const newMessage = payload.new as Message
-            setMessages(prev => [...prev, newMessage])
+          async (payload: any) => {
+            const newMessage = payload.new
+
+            // 사용자 정보 가져오기
+            const { data: userData } = await supabase
+              .from('users')
+              .select('display_name')
+              .eq('id', newMessage.user_id)
+              .single()
+
+            const formattedMessage = {
+              ...newMessage,
+              display_name: userData?.display_name || newMessage.username
+            }
+
+            setMessages(prev => [...prev, formattedMessage])
           }
         )
         .subscribe((status: string) => {
@@ -232,7 +195,7 @@ export default function ChatPage() {
     }
   }
 
-  const trackOnlineUser = async (userId: string) => {
+  const trackOnlineUser = async () => {
     if (!supabase) return
 
     try {
@@ -252,26 +215,17 @@ export default function ChatPage() {
     }
   }
 
-  const handleUsernameSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (usernameInput.trim()) {
-      const sanitized = sanitizeUsername(usernameInput.trim())
-      setUsername(sanitized)
-      setUsernameInput('')
-    }
-  }
-
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !currentUserId || !isConnected || !supabase) return
+    if (!message.trim() || !authUser || !isConnected || !supabase) return
 
     try {
       const { error } = await supabase
         .from('messages')
         .insert([{
           content: message.trim(),
-          username: username,
-          user_id: currentUserId
+          username: authUser.username,
+          user_id: authUser.id
         }])
 
       if (error) {
@@ -280,11 +234,19 @@ export default function ChatPage() {
       }
 
       setMessage('')
-      await trackOnlineUser(currentUserId)
+      await trackOnlineUser()
       
     } catch (error) {
       console.error('sendMessage error:', error)
     }
+  }
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('auth_user')
+    if (channelRef.current && supabase) {
+      supabase.removeChannel(channelRef.current)
+    }
+    router.push('/auth')
   }
 
   const formatTime = (timestamp: string) => {
@@ -294,17 +256,16 @@ export default function ChatPage() {
     })
   }
 
-  // Supabase 로딩 중
-  if (!supabase) {
+  // 인증 로딩 중
+  if (!authUser) {
     return (
       <div className="min-h-screen bg-black text-green-400 flex items-center justify-center p-4 crt-effect">
         <div className="retro-border p-6 md:p-8 w-full max-w-sm md:max-w-md relative">
           <div className="scanline"></div>
           <h1 className="text-xl md:text-2xl mb-6 text-center retro-glow typewriter">
-            INITIALIZING_SUPABASE...
+            AUTHENTICATING...
           </h1>
           <div className="text-center">
-            <p className="text-xs text-yellow-400 mb-4">&gt; {debugInfo}</p>
             <div className="mt-4">
               <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1"></span>
               <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1 delay-100"></span>
@@ -316,62 +277,13 @@ export default function ChatPage() {
     )
   }
 
-  if (!username) {
-    return (
-      <div className="min-h-screen bg-black text-green-400 flex items-center justify-center p-4 crt-effect">
-        <div className="retro-border p-6 md:p-8 w-full max-w-sm md:max-w-md relative">
-          <div className="scanline"></div>
-          <h1 className="text-xl md:text-2xl mb-6 text-center retro-glow typewriter">
-            SUPABASE_TERMINAL
-          </h1>
-          
-          <form onSubmit={handleUsernameSubmit} className="space-y-4 md:space-y-6">
-            <div>
-              <label className="block text-xs md:text-sm mb-2 text-green-400">
-                &gt; ENTER_USERNAME (영문/숫자만):
-              </label>
-              <input
-                type="text"
-                value={usernameInput}
-                onChange={(e) => setUsernameInput(e.target.value)}
-                className="retro-input w-full text-sm md:text-base"
-                placeholder="username123"
-                maxLength={15}
-                required
-                autoFocus
-                disabled={isLoading}
-                pattern="[a-zA-Z0-9]+"
-                title="영문자와 숫자만 입력 가능합니다"
-              />
-            </div>
-            
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="retro-button w-full text-xs md:text-sm py-3 md:py-4"
-            >
-              {isLoading ? 'CONNECTING...' : 'CONNECT_TO_SUPABASE'}
-            </button>
-          </form>
-          
-          <div className="mt-4 md:mt-6 text-xs text-gray-500 space-y-1">
-            <p>&gt; Status: {debugInfo}</p>
-            <p>&gt; Protocol: WebSocket + PostgreSQL</p>
-            <p>&gt; Note: 한글 사용자명은 자동으로 영문 변환됩니다</p>
-            <p>&gt; Deployment: Vercel Compatible</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="h-screen bg-black text-green-400 flex flex-col crt-effect overflow-hidden">
-      {/* Header - 단일 헤더만 유지 */}
+      {/* Header */}
       <header className="border-b-2 border-green-400 p-3 md:p-4 retro-flicker flex-shrink-0">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
           <h1 className="text-lg sm:text-xl retro-glow">
-            SUPABASE_CHAT.EXE
+            SECURE_CHAT.EXE
           </h1>
           
           <div className="flex items-center space-x-4 md:space-x-6">
@@ -382,22 +294,28 @@ export default function ChatPage() {
             
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 md:w-3 md:h-3 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-              <span className="text-xs md:text-sm">{isConnected ? 'REALTIME' : 'CONNECTING'}</span>
+              <span className="text-xs md:text-sm">{isConnected ? 'SECURE' : 'CONNECTING'}</span>
             </div>
             
-            <a href="/" className="retro-button text-xs py-1 px-3">
-              EXIT
-            </a>
+            <button 
+              onClick={handleLogout}
+              className="retro-button text-xs py-1 px-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black"
+            >
+              LOGOUT
+            </button>
           </div>
         </div>
       </header>
 
       {/* User Info */}
       <div className="border-b border-gray-700 p-2 md:p-3 bg-gray-900 bg-opacity-50 flex-shrink-0">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
           <span className="text-xs md:text-sm">
-            &gt; Logged in as: <span className="text-orange-400">{username}</span>
-            {!isConnected && <span className="text-red-400 ml-2">(Connecting...)</span>}
+            &gt; Authenticated as: <span className="text-orange-400">{authUser.displayName}</span>
+            <span className="text-gray-500 ml-2">(@{authUser.username})</span>
+          </span>
+          <span className="text-xs text-gray-500">
+            &gt; Session: {new Date(authUser.loginTime).toLocaleTimeString('ko-KR')}
           </span>
         </div>
       </div>
@@ -412,7 +330,7 @@ export default function ChatPage() {
         >
           {isLoading ? (
             <div className="text-center text-gray-500 mt-4 md:mt-8 fade-in-up">
-              <p className="text-sm md:text-base">&gt; Connecting to Supabase Realtime...</p>
+              <p className="text-sm md:text-base">&gt; Establishing secure connection...</p>
               <div className="mt-2">
                 <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1"></span>
                 <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1 delay-100"></span>
@@ -421,21 +339,22 @@ export default function ChatPage() {
             </div>
           ) : messages.length === 0 ? (
             <div className="text-center text-gray-500 mt-4 md:mt-8 fade-in-up">
-              <p className="text-sm md:text-base">&gt; Supabase Realtime ready...</p>
-              <p className="text-xs mt-2">&gt; Type your message below to begin communication</p>
-              <p className="text-xs mt-1 text-green-400">&gt; Messages are stored in PostgreSQL cloud database</p>
+              <p className="text-sm md:text-base">&gt; Secure channel established...</p>
+              <p className="text-xs mt-2">&gt; Authenticated users only</p>
+              <p className="text-xs mt-1 text-green-400">&gt; All messages are encrypted and stored securely</p>
             </div>
           ) : (
             messages.map((msg) => (
               <div key={msg.id} className="fade-in-up">
-                <div className={`retro-message ${msg.username === username ? 'user' : ''} text-sm md:text-base`}>
+                <div className={`retro-message ${msg.username === authUser.username ? 'user' : ''} text-sm md:text-base`}>
                   <div className="flex justify-between items-start mb-1 md:mb-2">
                     <span className="text-xs md:text-sm font-bold">
                       {msg.username === 'SYSTEM' ? (
                         <span className="text-yellow-400">[SYSTEM]</span>
                       ) : (
-                        <span className={msg.username === username ? 'text-orange-400' : 'text-green-400'}>
-                          {msg.username}
+                        <span className={msg.username === authUser.username ? 'text-orange-400' : 'text-green-400'}>
+                          {msg.display_name}
+                          <span className="text-gray-500 ml-1 text-xs">@{msg.username}</span>
                         </span>
                       )}
                     </span>
@@ -451,7 +370,7 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area - 단일 입력 영역만 유지 */}
+        {/* Input Area */}
         <div className="retro-border border-t-2 border-green-400 p-3 md:p-4 bg-gray-900 bg-opacity-50 flex-shrink-0">
           <form onSubmit={sendMessage} className="space-y-3">
             <div className="flex space-x-3">
@@ -461,7 +380,7 @@ export default function ChatPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 className="retro-input flex-1"
-                placeholder="Enter your message..."
+                placeholder="Enter secure message..."
                 maxLength={500}
                 disabled={!isConnected}
                 autoFocus
@@ -477,7 +396,7 @@ export default function ChatPage() {
             
             <div className="flex justify-between text-xs text-gray-500">
               <span>
-                &gt; Status: {isConnected ? 'Connected' : 'Connecting...'}
+                &gt; Status: {isConnected ? 'Secure Channel Active' : 'Establishing connection...'}
               </span>
               <span>
                 &gt; {message.length}/500
@@ -490,7 +409,8 @@ export default function ChatPage() {
       {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-1/3 right-1/4 w-px h-px bg-green-400 shadow-[0_0_20px_10px_rgba(0,255,65,0.2)] animate-pulse"></div>
-        <div className="hidden md:block absolute bottom-1/3 left-1/4 w-px h-px bg-orange-400 shadow-[0_0_15px_8px_rgba(255,107,53,0.2)] animate-pulse delay-1000"></div>
+        <div className="hidden md:block absolute bottom-1/3 left-1/4 w-px h-px bg-blue-400 shadow-[0_0_15px_8px_rgba(0,100,255,0.2)] animate-pulse delay-1000"></div>
+        <div className="absolute top-1/4 left-1/3 w-px h-px bg-purple-400 shadow-[0_0_25px_12px_rgba(150,0,255,0.2)] animate-pulse delay-2000"></div>
       </div>
     </div>
   )
