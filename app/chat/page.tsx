@@ -41,7 +41,12 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
-  // Supabase 클라이언트 초기화 (클라이언트에서만)
+  // 사용자명 영문/숫자 변환 함수
+  const sanitizeUsername = (input: string): string => {
+    return input.replace(/[^a-zA-Z0-9]/g, '').substring(0, 15) || 'user' + Date.now()
+  }
+
+  // Supabase 클라이언트 초기화
   useEffect(() => {
     const initializeSupabase = async () => {
       try {
@@ -52,17 +57,10 @@ export default function ChatPage() {
         
         console.log('Environment check:', {
           url: supabaseUrl ? 'Found' : 'Missing',
-          key: supabaseAnonKey ? 'Found' : 'Missing',
-          urlValue: supabaseUrl,
-          keyValue: supabaseAnonKey ? supabaseAnonKey.substring(0, 20) + '...' : 'Missing'
+          key: supabaseAnonKey ? 'Found' : 'Missing'
         })
         
         if (!supabaseUrl || !supabaseAnonKey) {
-          const errorMsg = `환경변수 누락: URL=${supabaseUrl ? 'OK' : 'Missing'}, KEY=${supabaseAnonKey ? 'OK' : 'Missing'}`
-          setDebugInfo(errorMsg)
-          console.error('Supabase credentials not found:', errorMsg)
-          
-          // 하드코딩으로 테스트
           const hardcodedUrl = 'https://vdiqoxxaiiwgqvmtwxxy.supabase.co'
           const hardcodedKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaXFveHhhaWl3Z3F2bXR3eHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxNzQ0ODAsImV4cCI6MjA2Mzc1MDQ4MH0.ZxwDHCADi5Q5jxJt6Isjik5j_AmalQE2wYH7SvPpHDA'
           
@@ -125,17 +123,11 @@ export default function ChatPage() {
       setIsLoading(true)
       setIsConnected(false)
 
-      // 1. 사용자 등록 또는 가져오기
       const userId = await registerOrGetUser()
       setCurrentUserId(userId)
 
-      // 2. 이전 메시지 로드
       await loadPreviousMessages()
-
-      // 3. 실시간 구독 설정
       setupRealtimeSubscription()
-
-      // 4. 온라인 사용자 추적
       await trackOnlineUser(userId)
 
       setIsConnected(true)
@@ -150,97 +142,121 @@ export default function ChatPage() {
   const registerOrGetUser = async (): Promise<string> => {
     if (!supabase) throw new Error('Supabase not initialized')
 
-    // 기존 사용자 확인
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('username', username)
-      .single()
+    try {
+      const { data: existingUser, error: selectError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .maybeSingle()
 
-    if (existingUser) {
-      return existingUser.id
+      if (selectError) {
+        console.error('Error checking existing user:', selectError)
+      }
+
+      if (existingUser) {
+        console.log('Found existing user:', existingUser.id)
+        return existingUser.id
+      }
+
+      console.log('Creating new user:', username)
+      const { data: newUser, error: insertError } = await supabase
+        .from('users')
+        .insert([{ username }])
+        .select('id')
+        .single()
+
+      if (insertError) {
+        console.error('Error creating user:', insertError)
+        throw insertError
+      }
+
+      console.log('Created new user:', newUser.id)
+      return newUser.id
+    } catch (error) {
+      console.error('registerOrGetUser error:', error)
+      return 'temp_' + Date.now()
     }
-
-    // 새 사용자 생성
-    const { data: newUser, error } = await supabase
-      .from('users')
-      .insert({ username })
-      .select('id')
-      .single()
-
-    if (error) throw error
-    return newUser.id
   }
 
   const loadPreviousMessages = async () => {
     if (!supabase) return
 
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .limit(100)
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(100)
 
-    if (error) {
-      console.error('Error loading messages:', error)
-      return
+      if (error) {
+        console.error('Error loading messages:', error)
+        return
+      }
+
+      setMessages(data || [])
+    } catch (error) {
+      console.error('loadPreviousMessages error:', error)
     }
-
-    setMessages(data || [])
   }
 
   const setupRealtimeSubscription = () => {
     if (!supabase) return
 
-    // 이전 채널 정리
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
+    try {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+      }
+
+      const channel = supabase
+        .channel('chat-messages')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+          },
+          (payload: any) => {
+            const newMessage = payload.new as Message
+            setMessages(prev => [...prev, newMessage])
+          }
+        )
+        .subscribe((status: string) => {
+          console.log('Realtime subscription status:', status)
+          setIsConnected(status === 'SUBSCRIBED')
+        })
+
+      channelRef.current = channel
+    } catch (error) {
+      console.error('setupRealtimeSubscription error:', error)
     }
-
-    // 새 실시간 채널 생성
-    const channel = supabase
-      .channel('chat-messages')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages'
-        },
-        (payload: any) => {
-          const newMessage = payload.new as Message
-          setMessages(prev => [...prev, newMessage])
-        }
-      )
-      .subscribe((status: string) => {
-        console.log('Realtime subscription status:', status)
-        setIsConnected(status === 'SUBSCRIBED')
-      })
-
-    channelRef.current = channel
   }
 
   const trackOnlineUser = async (userId: string) => {
     if (!supabase) return
 
-    // 간단한 온라인 사용자 추적
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-    
-    const { data } = await supabase
-      .from('messages')
-      .select('username')
-      .gte('created_at', fiveMinutesAgo)
+    try {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+      
+      const { data } = await supabase
+        .from('messages')
+        .select('username')
+        .gte('created_at', fiveMinutesAgo)
 
-    if (data) {
-      const uniqueUsers = new Set(data.map((msg: any) => msg.username))
-      setOnlineUsers(uniqueUsers.size)
+      if (data) {
+        const uniqueUsers = new Set(data.map((msg: any) => msg.username))
+        setOnlineUsers(uniqueUsers.size)
+      }
+    } catch (error) {
+      console.error('trackOnlineUser error:', error)
     }
   }
 
   const handleUsernameSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (usernameInput.trim()) {
-      setUsername(usernameInput.trim())
+      const sanitized = sanitizeUsername(usernameInput.trim())
+      setUsername(sanitized)
       setUsernameInput('')
     }
   }
@@ -252,21 +268,22 @@ export default function ChatPage() {
     try {
       const { error } = await supabase
         .from('messages')
-        .insert({
+        .insert([{
           content: message.trim(),
           username: username,
           user_id: currentUserId
-        })
+        }])
 
-      if (error) throw error
+      if (error) {
+        console.error('Error sending message:', error)
+        return
+      }
 
       setMessage('')
-      
-      // 온라인 사용자 수 업데이트
       await trackOnlineUser(currentUserId)
       
     } catch (error) {
-      console.error('Error sending message:', error)
+      console.error('sendMessage error:', error)
     }
   }
 
@@ -311,18 +328,20 @@ export default function ChatPage() {
           <form onSubmit={handleUsernameSubmit} className="space-y-4 md:space-y-6">
             <div>
               <label className="block text-xs md:text-sm mb-2 text-green-400">
-                &gt; ENTER_USERNAME:
+                &gt; ENTER_USERNAME (영문/숫자만):
               </label>
               <input
                 type="text"
                 value={usernameInput}
                 onChange={(e) => setUsernameInput(e.target.value)}
                 className="retro-input w-full text-sm md:text-base"
-                placeholder="username_"
-                maxLength={20}
+                placeholder="username123"
+                maxLength={15}
                 required
                 autoFocus
                 disabled={isLoading}
+                pattern="[a-zA-Z0-9]+"
+                title="영문자와 숫자만 입력 가능합니다"
               />
             </div>
             
@@ -338,7 +357,7 @@ export default function ChatPage() {
           <div className="mt-4 md:mt-6 text-xs text-gray-500 space-y-1">
             <p>&gt; Status: {debugInfo}</p>
             <p>&gt; Protocol: WebSocket + PostgreSQL</p>
-            <p>&gt; Database: Supabase Cloud</p>
+            <p>&gt; Note: 한글 사용자명은 자동으로 영문 변환됩니다</p>
             <p>&gt; Deployment: Vercel Compatible</p>
           </div>
         </div>
@@ -348,54 +367,27 @@ export default function ChatPage() {
 
   return (
     <div className="h-screen bg-black text-green-400 flex flex-col crt-effect overflow-hidden">
-      {/* Header */}
+      {/* Header - 단일 헤더만 유지 */}
       <header className="border-b-2 border-green-400 p-3 md:p-4 retro-flicker flex-shrink-0">
-        <div className="max-w-6xl mx-auto">
-          {/* Desktop Header */}
-          <div className="hidden md:flex justify-between items-center">
-            <h1 className="text-xl retro-glow">
-              SUPABASE_CHAT.EXE
-            </h1>
-            
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm">ACTIVE_USERS:</span>
-                <span className="text-yellow-400">{onlineUsers}</span>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                <span className="text-sm">{isConnected ? 'REALTIME' : 'CONNECTING'}</span>
-              </div>
-              
-              <a href="/" className="retro-button text-xs py-1 px-3">
-                EXIT
-              </a>
-            </div>
-          </div>
-
-          {/* Mobile Header */}
-          <div className="md:hidden space-y-3">
-            <div className="flex justify-between items-center">
-              <h1 className="text-lg retro-glow">
-                SUPABASE_CHAT
-              </h1>
-              <a href="/" className="retro-button text-xs py-1 px-3">
-                EXIT
-              </a>
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
+          <h1 className="text-lg sm:text-xl retro-glow">
+            SUPABASE_CHAT.EXE
+          </h1>
+          
+          <div className="flex items-center space-x-4 md:space-x-6">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs md:text-sm">USERS:</span>
+              <span className="text-yellow-400">{onlineUsers}</span>
             </div>
             
-            <div className="flex justify-between items-center text-xs">
-              <div className="flex items-center space-x-2">
-                <span>USERS:</span>
-                <span className="text-yellow-400">{onlineUsers}</span>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                <span>{isConnected ? 'REALTIME' : 'LOADING'}</span>
-              </div>
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 md:w-3 md:h-3 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+              <span className="text-xs md:text-sm">{isConnected ? 'REALTIME' : 'CONNECTING'}</span>
             </div>
+            
+            <a href="/" className="retro-button text-xs py-1 px-3">
+              EXIT
+            </a>
           </div>
         </div>
       </header>
@@ -405,7 +397,7 @@ export default function ChatPage() {
         <div className="max-w-6xl mx-auto">
           <span className="text-xs md:text-sm">
             &gt; Logged in as: <span className="text-orange-400">{username}</span>
-            {!isConnected && <span className="text-red-400 ml-2">(Connecting to Supabase...)</span>}
+            {!isConnected && <span className="text-red-400 ml-2">(Connecting...)</span>}
           </span>
         </div>
       </div>
@@ -459,12 +451,11 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
+        {/* Input Area - 단일 입력 영역만 유지 */}
         <div className="retro-border border-t-2 border-green-400 p-3 md:p-4 bg-gray-900 bg-opacity-50 flex-shrink-0">
-          <form onSubmit={sendMessage} className="space-y-2 md:space-y-3">
-            {/* Desktop Input */}
-            <div className="hidden md:flex space-x-3">
-              <span className="text-green-400 text-sm self-center">&gt;</span>
+          <form onSubmit={sendMessage} className="space-y-3">
+            <div className="flex space-x-3">
+              <span className="text-green-400 text-sm self-center flex-shrink-0">&gt;</span>
               <input
                 type="text"
                 value={message}
@@ -478,42 +469,15 @@ export default function ChatPage() {
               <button
                 type="submit"
                 disabled={!isConnected || !message.trim()}
-                className="retro-button px-6"
+                className="retro-button px-4 md:px-6"
               >
                 SEND
               </button>
             </div>
-
-            {/* Mobile Input */}
-            <div className="md:hidden space-y-3">
-              <div className="flex space-x-2">
-                <span className="text-green-400 text-sm self-center">&gt;</span>
-                <input
-                  type="text"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  className="retro-input flex-1 text-sm"
-                  placeholder="Type message..."
-                  maxLength={500}
-                  disabled={!isConnected}
-                  autoFocus
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={!isConnected || !message.trim()}
-                className="retro-button w-full text-xs py-3"
-              >
-                SEND MESSAGE
-              </button>
-            </div>
             
             <div className="flex justify-between text-xs text-gray-500">
-              <span className="hidden md:block">
-                &gt; Status: {isConnected ? 'Supabase Realtime Connected' : 'Connecting to database...'}
-              </span>
-              <span className="md:hidden">
-                &gt; {isConnected ? 'Connected' : 'Loading...'}
+              <span>
+                &gt; Status: {isConnected ? 'Connected' : 'Connecting...'}
               </span>
               <span>
                 &gt; {message.length}/500
