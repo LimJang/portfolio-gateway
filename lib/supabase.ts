@@ -11,17 +11,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
-// 타입 정의
-export interface Message {
-  id: string
-  content: string
-  username: string
-  created_at: string
-  user_id?: string
-}
-
-export interface User {
-  id: string
-  username: string
-  created_at: string
-}
+// 타입은 이제 types/database.ts에서 import
+// 기존 중복 타입 정의 제거됨
