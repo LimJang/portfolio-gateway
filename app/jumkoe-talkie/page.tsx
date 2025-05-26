@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useWebRTC } from '@/lib/webrtc/use-webrtc'
 
 interface AuthUser {
   id: string
@@ -36,6 +37,20 @@ export default function JumkoeTalkiePage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const channelRef = useRef<any>(null)
   const animationFrameRef = useRef<number | null>(null)
+
+  // WebRTC 훅 사용
+  const {
+    connectedPeers,
+    isVoiceEnabled,
+    startVoice,
+    stopVoice,
+    setLocalAudioStream,
+    isPeerConnected
+  } = useWebRTC({
+    supabase,
+    userId: authUser?.id || '',
+    connectedUsers
+  })
 
   // 관리자 체크
   const isAdmin = (user: AuthUser): boolean => {
@@ -188,6 +203,11 @@ export default function JumkoeTalkiePage() {
       })
       setMicPermission('granted')
       setupAudioAnalyzer(stream)
+      
+      // WebRTC에 오디오 스트림 설정
+      if (isVoiceEnabled) {
+        await setLocalAudioStream(stream)
+      }
     } catch (error) {
       console.error('Microphone permission denied:', error)
       setMicPermission('denied')
@@ -251,6 +271,17 @@ export default function JumkoeTalkiePage() {
       return
     }
 
+    // WebRTC 음성 통신 시작 (첫 번째 PTT 클릭 시)
+    if (!isVoiceEnabled) {
+      try {
+        const stream = await startVoice()
+        setupAudioAnalyzer(stream)
+      } catch (error) {
+        console.error('Failed to start voice communication:', error)
+        return
+      }
+    }
+
     if (!audioStreamRef.current) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -261,6 +292,10 @@ export default function JumkoeTalkiePage() {
           } 
         })
         setupAudioAnalyzer(stream)
+        
+        if (isVoiceEnabled) {
+          await setLocalAudioStream(stream)
+        }
       } catch (error) {
         console.error('Failed to get audio stream:', error)
         return
@@ -369,8 +404,19 @@ export default function JumkoeTalkiePage() {
             </div>
             
             <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 md:w-3 md:h-3 retro-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-              <span className="text-xs md:text-sm">{isConnected ? 'VOICE_READY' : 'CONNECTING'}</span>
+              <span className="text-xs md:text-sm">P2P:</span>
+              <span className="text-blue-400">{connectedPeers.length}</span>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <div className={`w-2 h-2 md:w-3 md:h-3 retro-pulse ${
+                isVoiceEnabled ? 'bg-blue-400' : 
+                isConnected ? 'bg-green-400' : 'bg-red-400'
+              }`}></div>
+              <span className="text-xs md:text-sm">{
+                isVoiceEnabled ? 'VOICE_ACTIVE' : 
+                isConnected ? 'VOICE_READY' : 'CONNECTING'
+              }</span>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -445,20 +491,34 @@ export default function JumkoeTalkiePage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {connectedUsers.map((user) => (
-                <div key={user.id} className="retro-border p-3 bg-gray-900 bg-opacity-50">
-                  <div className="flex items-center justify-between">
-                    <span className="text-green-400 font-bold">{user.displayName}</span>
-                    <div className="flex items-center space-x-2">
-                      {user.isSpeaking && (
-                        <span className="text-red-400 text-xs animate-pulse">🔴 SPEAKING</span>
-                      )}
-                      <div className={`w-2 h-2 retro-pulse ${user.isConnected ? 'bg-green-400' : 'bg-gray-500'}`}></div>
+              {connectedUsers.map((user) => {
+                const isP2PConnected = isPeerConnected(user.id)
+                return (
+                  <div key={user.id} className="retro-border p-3 bg-gray-900 bg-opacity-50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-green-400 font-bold">{user.displayName}</span>
+                      <div className="flex items-center space-x-2">
+                        {user.isSpeaking && (
+                          <span className="text-red-400 text-xs animate-pulse">🔴 SPEAKING</span>
+                        )}
+                        {isP2PConnected && (
+                          <span className="text-blue-400 text-xs">📞 P2P</span>
+                        )}
+                        <div className={`w-2 h-2 retro-pulse ${
+                          isP2PConnected ? 'bg-blue-400' : 
+                          user.isConnected ? 'bg-green-400' : 'bg-gray-500'
+                        }`}></div>
+                      </div>
                     </div>
+                    <span className="text-xs text-gray-500">@{user.username}</span>
+                    {isP2PConnected && (
+                      <div className="text-xs text-blue-400 mt-1">
+                        &gt; Direct voice connection active
+                      </div>
+                    )}
                   </div>
-                  <span className="text-xs text-gray-500">@{user.username}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
