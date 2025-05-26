@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['socket.io']
-  }
+  // 기본 설정만 유지
 }
 
 module.exports = nextConfig

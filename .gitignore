@@ -2,9 +2,11 @@ node_modules/
 .next/
 *.log
 .DS_Store
+**/.DS_Store
 memory-bank/
 .env*
 dist/
 build/
 legacy-socketio/
 .vercel
+cleanup.sh
