@@ -316,6 +316,43 @@ export default function Home() {
             }`}></div>
           </div>
 
+          {/* Jumkoe-Talkie Voice Chat */}
+          <div 
+            onClick={() => handleCardClick(true, '/jumkoe-talkie')}
+            className={`retro-border p-6 md:p-8 transition-all duration-300 group relative overflow-hidden min-h-[200px] flex flex-col justify-between ${
+              !authUser 
+                ? 'opacity-75 cursor-pointer hover:bg-amber-400 hover:bg-opacity-10' 
+                : 'cursor-pointer hover:bg-amber-400 hover:bg-opacity-10'
+            }`}
+          >
+            <div className="relative z-10">
+              <h3 className={`text-xl md:text-2xl mb-4 transition-colors ${
+                authUser 
+                  ? 'text-amber-400 group-hover:text-black' 
+                  : 'text-amber-600 group-hover:text-black'
+              }`}>
+                [JUMKOE-TALKIE.EXE]
+              </h3>
+              <p className="text-gray-400 group-hover:text-gray-800 transition-colors mb-6 text-sm md:text-base">
+                {authUser 
+                  ? '> Real-time voice communication channel' 
+                  : '> 실시간 음성 채팅이 필요한 서비스입니다'
+                }
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="retro-button text-xs md:text-sm px-4 md:px-6 py-2 md:py-3">
+                  {authUser ? 'CONNECT' : 'LOGIN_REQUIRED'}
+                </span>
+                <span className={`group-hover:translate-x-2 transition-transform text-lg md:text-xl ${
+                  authUser ? 'text-amber-400' : 'text-amber-600'
+                }`}>
+                  📻
+                </span>
+              </div>
+            </div>
+            <div className="absolute inset-0 bg-amber-400 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 opacity-20"></div>
+          </div>
+
           {/* Patch Notes */}
           <div 
             onClick={() => router.push('/patch-notes')}
@@ -429,7 +466,7 @@ export default function Home() {
             <p>&gt; BUILD_STATUS: Deployment successful ✓ | Version: {latestPatch ? latestPatch.version : 'Loading...'}</p>
             <p className="hidden md:block">&gt; USER_STATUS: {authUser ? `Authenticated as ${authUser.displayName}` : 'Guest User'}</p>
             <p className="md:hidden">&gt; USER: {authUser ? authUser.displayName : 'Guest'}</p>
-            <p>&gt; FEATURES: Auth + Chat + Patch Notes + Admin | Security: Enhanced</p>
+            <p>&gt; FEATURES: Auth + Chat + Patch Notes + Admin + Voice Chat | Security: Enhanced</p>
           </div>
         </section>
       </main>
