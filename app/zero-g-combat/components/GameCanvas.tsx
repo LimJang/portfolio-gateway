@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import PhysicsEngine from '../lib/physics/PhysicsEngine';
-import { Spaceship } from '../lib/physics/GameObject';
 
 interface GameCanvasProps {
   onGameEnd: () => void;
@@ -11,7 +10,7 @@ interface GameCanvasProps {
 export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<PhysicsEngine | null>(null);
-  const [gameStatus, setGameStatus] = useState<'playing' | 'dead'>('playing');
+  const [gameStatus, setGameStatus] = useState<'loading' | 'playing' | 'dead'>('loading');
   const [stats, setStats] = useState({
     position: { x: 0, y: 0 },
     velocity: { x: 0, y: 0 },
@@ -21,16 +20,31 @@ export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    // Initialize physics engine
-    const engine = new PhysicsEngine(canvasRef.current);
-    engineRef.current = engine;
+    const initializeGame = async () => {
+      try {
+        // Initialize physics engine
+        const engine = new PhysicsEngine(canvasRef.current!);
+        engineRef.current = engine;
 
-    // Create player
-    const player = engine.createPlayer(400, 300);
-    
+        // Wait a bit for Matter.js to load, then create player
+        setTimeout(async () => {
+          if (engineRef.current) {
+            await engineRef.current.createPlayer(400, 300);
+            setGameStatus('playing');
+          }
+        }, 1000);
+
+      } catch (error) {
+        console.error('Failed to initialize game:', error);
+        setGameStatus('dead');
+      }
+    };
+
+    initializeGame();
+
     // Game loop
     const gameLoop = () => {
-      if (engineRef.current) {
+      if (engineRef.current && gameStatus === 'playing') {
         engineRef.current.update();
         
         // Update stats
@@ -59,7 +73,7 @@ export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
         engineRef.current.destroy();
       }
     };
-  }, []);
+  }, [gameStatus]);
 
   // Handle restart after death
   useEffect(() => {
@@ -84,23 +98,41 @@ export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
         />
       </div>
 
-      {/* Game HUD */}
-      <div className="absolute top-4 left-4 bg-black/80 border border-green-400 rounded p-3 text-xs">
-        <div className="space-y-1">
-          <div>POS: ({Math.round(stats.position.x)}, {Math.round(stats.position.y)})</div>
-          <div>VEL: ({Math.round(stats.velocity.x * 10) / 10}, {Math.round(stats.velocity.y * 10) / 10})</div>
-          <div>DIR: {Math.round(stats.direction)}°</div>
+      {/* Loading Screen */}
+      {gameStatus === 'loading' && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-green-400 mb-4">
+              INITIALIZING PHYSICS ENGINE...
+            </h2>
+            <div className="text-green-300">
+              Loading Matter.js
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Game HUD */}
+      {gameStatus === 'playing' && (
+        <div className="absolute top-4 left-4 bg-black/80 border border-green-400 rounded p-3 text-xs">
+          <div className="space-y-1">
+            <div>POS: ({Math.round(stats.position.x)}, {Math.round(stats.position.y)})</div>
+            <div>VEL: ({Math.round(stats.velocity.x * 10) / 10}, {Math.round(stats.velocity.y * 10) / 10})</div>
+            <div>DIR: {Math.round(stats.direction)}°</div>
+          </div>
+        </div>
+      )}
 
       {/* Instructions */}
-      <div className="absolute top-4 right-4 bg-black/80 border border-green-400 rounded p-3 text-xs">
-        <div className="space-y-1">
-          <div>WASD: Direction</div>
-          <div>SPACE: Thrust</div>
-          <div>Stay inside boundaries!</div>
+      {gameStatus === 'playing' && (
+        <div className="absolute top-4 right-4 bg-black/80 border border-green-400 rounded p-3 text-xs">
+          <div className="space-y-1">
+            <div>WASD: Direction</div>
+            <div>SPACE: Thrust</div>
+            <div>Stay inside boundaries!</div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Death Screen */}
       {gameStatus === 'dead' && (

@@ -1,7 +1,7 @@
-import Matter from 'matter-js';
+// GameObject.ts - Browser-safe implementation
 
 export abstract class GameObject {
-  public body: Matter.Body;
+  public body: any;
   public mass: number;
   
   constructor(x: number, y: number, mass: number) {
@@ -9,7 +9,7 @@ export abstract class GameObject {
     this.body = this.createBody(x, y);
   }
 
-  protected abstract createBody(x: number, y: number): Matter.Body;
+  protected abstract createBody(x: number, y: number): any;
   
   public update() {
     // Override in subclasses for specific behavior
@@ -20,13 +20,39 @@ export class Spaceship extends GameObject {
   public direction: number = 0; // 0-360 degrees
   public isAlive: boolean = true;
   public isThrusting: boolean = false;
+  private Matter: any = null;
 
   constructor(x: number, y: number) {
     super(x, y, 10); // Base mass of 10
+    this.initMatter();
   }
 
-  protected createBody(x: number, y: number): Matter.Body {
-    const body = Matter.Bodies.circle(x, y, 12, {
+  private async initMatter() {
+    try {
+      const MatterModule = await import('matter-js');
+      this.Matter = MatterModule.default;
+    } catch (error) {
+      console.error('Failed to load Matter.js in Spaceship:', error);
+    }
+  }
+
+  protected createBody(x: number, y: number): any {
+    // Return a placeholder until Matter.js loads
+    return {
+      position: { x, y },
+      velocity: { x: 0, y: 0 },
+      render: {
+        fillStyle: '#00ff00',
+        strokeStyle: '#ffffff',
+        lineWidth: 2
+      }
+    };
+  }
+
+  public async createMatterBody(Matter: any): Promise<any> {
+    if (!Matter) return this.body;
+
+    this.body = Matter.Bodies.circle(this.body.position.x, this.body.position.y, 12, {
       density: 0.001,
       frictionAir: 0.001, // Very minimal air resistance
       restitution: 0.8,   // Bouncy
@@ -37,24 +63,24 @@ export class Spaceship extends GameObject {
       }
     });
 
-    return body;
+    return this.body;
   }
 
   public update() {
+    if (!this.body || !this.body.render) return;
+    
     // Update visual representation based on thrust
     if (this.isThrusting) {
       this.body.render.fillStyle = '#ffff00'; // Yellow when thrusting
     } else {
       this.body.render.fillStyle = this.isAlive ? '#00ff00' : '#ff0000';
     }
-
-    // Add direction indicator (small line)
-    // This would be better handled in a custom render function
   }
 }
 
 export class Satellite extends GameObject {
   private driftVelocity: { x: number, y: number };
+  private Matter: any = null;
 
   constructor(x: number, y: number, radius: number) {
     super(x, y, 50); // Heavy mass
@@ -64,10 +90,36 @@ export class Satellite extends GameObject {
       x: (Math.random() - 0.5) * 0.5,
       y: (Math.random() - 0.5) * 0.5
     };
+    
+    this.initMatter();
   }
 
-  protected createBody(x: number, y: number): Matter.Body {
-    const body = Matter.Bodies.rectangle(x, y, 40, 60, {
+  private async initMatter() {
+    try {
+      const MatterModule = await import('matter-js');
+      this.Matter = MatterModule.default;
+    } catch (error) {
+      console.error('Failed to load Matter.js in Satellite:', error);
+    }
+  }
+
+  protected createBody(x: number, y: number): any {
+    // Return a placeholder until Matter.js loads
+    return {
+      position: { x, y },
+      velocity: { x: 0, y: 0 },
+      render: {
+        fillStyle: '#888888',
+        strokeStyle: '#ffffff',
+        lineWidth: 1
+      }
+    };
+  }
+
+  public async createMatterBody(Matter: any): Promise<any> {
+    if (!Matter) return this.body;
+
+    this.body = Matter.Bodies.rectangle(this.body.position.x, this.body.position.y, 40, 60, {
       density: 0.01,
       frictionAir: 0.001,
       restitution: 0.6,
@@ -78,12 +130,14 @@ export class Satellite extends GameObject {
       }
     });
 
-    return body;
+    return this.body;
   }
 
   public update() {
+    if (!this.body || !this.Matter) return;
+    
     // Apply slow drift movement
-    Matter.Body.applyForce(
+    this.Matter.Body.applyForce(
       this.body, 
       this.body.position, 
       {
@@ -97,14 +151,40 @@ export class Satellite extends GameObject {
 export class Asteroid extends GameObject {
   private rotationSpeed: number;
   private size: 'small' | 'medium' | 'large';
+  private Matter: any = null;
 
   constructor(x: number, y: number, mass: number, size: 'small' | 'medium' | 'large') {
     super(x, y, mass);
     this.size = size;
     this.rotationSpeed = (Math.random() - 0.5) * 0.02;
+    this.initMatter();
   }
 
-  protected createBody(x: number, y: number): Matter.Body {
+  private async initMatter() {
+    try {
+      const MatterModule = await import('matter-js');
+      this.Matter = MatterModule.default;
+    } catch (error) {
+      console.error('Failed to load Matter.js in Asteroid:', error);
+    }
+  }
+
+  protected createBody(x: number, y: number): any {
+    // Return a placeholder until Matter.js loads
+    return {
+      position: { x, y },
+      velocity: { x: 0, y: 0 },
+      render: {
+        fillStyle: '#8B4513',
+        strokeStyle: '#CD853F',
+        lineWidth: 1
+      }
+    };
+  }
+
+  public async createMatterBody(Matter: any): Promise<any> {
+    if (!Matter) return this.body;
+
     const sizeMap = {
       'small': 8,
       'medium': 15,
@@ -113,7 +193,7 @@ export class Asteroid extends GameObject {
     
     const radius = sizeMap[this.size];
     
-    const body = Matter.Bodies.polygon(x, y, 6, radius, {
+    this.body = Matter.Bodies.polygon(this.body.position.x, this.body.position.y, 6, radius, {
       density: 0.005,
       frictionAir: 0.001,
       restitution: 0.7,
@@ -125,16 +205,18 @@ export class Asteroid extends GameObject {
     });
 
     // Give it some initial random velocity
-    Matter.Body.setVelocity(body, {
+    Matter.Body.setVelocity(this.body, {
       x: (Math.random() - 0.5) * 2,
       y: (Math.random() - 0.5) * 2
     });
 
-    return body;
+    return this.body;
   }
 
   public update() {
+    if (!this.body || !this.Matter) return;
+    
     // Rotate the asteroid
-    Matter.Body.rotate(this.body, this.rotationSpeed);
+    this.Matter.Body.rotate(this.body, this.rotationSpeed);
   }
 }

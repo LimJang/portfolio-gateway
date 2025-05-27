@@ -1,28 +1,50 @@
 'use client';
 
-import Matter from 'matter-js';
 import { Spaceship, Asteroid, Satellite } from './GameObject';
 
 export default class PhysicsEngine {
-  private engine: Matter.Engine;
-  private render: Matter.Render;
-  private runner: Matter.Runner;
+  private engine: any;
+  private render: any;
+  private runner: any;
   private canvas: HTMLCanvasElement;
   private player: Spaceship | null = null;
   private obstacles: (Asteroid | Satellite)[] = [];
   private keys: { [key: string]: boolean } = {};
+  private Matter: any = null;
+  private isInitialized: boolean = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    
+    this.initializeMatter();
+  }
+
+  private async initializeMatter() {
+    try {
+      // Dynamic import for browser compatibility
+      const MatterModule = await import('matter-js');
+      this.Matter = MatterModule.default;
+      
+      // Now initialize the physics engine
+      await this.setupPhysics();
+      this.isInitialized = true;
+    } catch (error) {
+      console.error('Failed to load Matter.js:', error);
+      // Show error message on canvas
+      this.showError('Failed to load physics engine');
+    }
+  }
+
+  private async setupPhysics() {
+    if (!this.Matter) return;
+
     // Create Matter.js engine
-    this.engine = Matter.Engine.create();
+    this.engine = this.Matter.Engine.create();
     this.engine.world.gravity.y = 0; // Zero gravity
     this.engine.world.gravity.x = 0;
 
     // Create renderer
-    this.render = Matter.Render.create({
-      canvas: canvas,
+    this.render = this.Matter.Render.create({
+      canvas: this.canvas,
       engine: this.engine,
       options: {
         width: 800,
@@ -39,12 +61,12 @@ export default class PhysicsEngine {
     this.createBoundaries();
     
     // Create obstacles
-    this.createObstacles();
+    await this.createObstacles();
 
     // Start renderer and runner
-    Matter.Render.run(this.render);
-    this.runner = Matter.Runner.create();
-    Matter.Runner.run(this.runner, this.engine);
+    this.Matter.Render.run(this.render);
+    this.runner = this.Matter.Runner.create();
+    this.Matter.Runner.run(this.runner, this.engine);
 
     // Set up input handling
     this.setupInputHandling();
@@ -53,45 +75,64 @@ export default class PhysicsEngine {
     this.setupCollisionDetection();
   }
 
+  private showError(message: string) {
+    const ctx = this.canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#ff0000';
+      ctx.font = '20px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(message, 400, 300);
+      ctx.fillText('Please install Matter.js', 400, 330);
+    }
+  }
+
   private createBoundaries() {
+    if (!this.Matter) return;
+    
     const thickness = 10;
     const walls = [
       // Top wall
-      Matter.Bodies.rectangle(400, -thickness/2, 800, thickness, { 
+      this.Matter.Bodies.rectangle(400, -thickness/2, 800, thickness, { 
         isStatic: true,
         render: { fillStyle: '#ff0000' }
       }),
       // Bottom wall  
-      Matter.Bodies.rectangle(400, 600 + thickness/2, 800, thickness, { 
+      this.Matter.Bodies.rectangle(400, 600 + thickness/2, 800, thickness, { 
         isStatic: true,
         render: { fillStyle: '#ff0000' }
       }),
       // Left wall
-      Matter.Bodies.rectangle(-thickness/2, 300, thickness, 600, { 
+      this.Matter.Bodies.rectangle(-thickness/2, 300, thickness, 600, { 
         isStatic: true,
         render: { fillStyle: '#ff0000' }
       }),
       // Right wall
-      Matter.Bodies.rectangle(800 + thickness/2, 300, thickness, 600, { 
+      this.Matter.Bodies.rectangle(800 + thickness/2, 300, thickness, 600, { 
         isStatic: true,
         render: { fillStyle: '#ff0000' }
       })
     ];
 
-    Matter.Composite.add(this.engine.world, walls);
+    this.Matter.Composite.add(this.engine.world, walls);
   }
 
-  private createObstacles() {
+  private async createObstacles() {
+    if (!this.Matter) return;
+    
     // Create a satellite (heavy, slow-moving obstacle)
     const satellite = new Satellite(400, 200, 30);
-    Matter.Composite.add(this.engine.world, satellite.body);
+    await satellite.createMatterBody(this.Matter);
+    this.Matter.Composite.add(this.engine.world, satellite.body);
     this.obstacles.push(satellite);
 
     // Create some asteroids
     const asteroid1 = new Asteroid(200, 400, 15, 'medium');
     const asteroid2 = new Asteroid(600, 150, 10, 'small');
     
-    Matter.Composite.add(this.engine.world, [asteroid1.body, asteroid2.body]);
+    await asteroid1.createMatterBody(this.Matter);
+    await asteroid2.createMatterBody(this.Matter);
+    
+    this.Matter.Composite.add(this.engine.world, [asteroid1.body, asteroid2.body]);
     this.obstacles.push(asteroid1, asteroid2);
   }
 
@@ -114,7 +155,9 @@ export default class PhysicsEngine {
   }
 
   private setupCollisionDetection() {
-    Matter.Events.on(this.engine, 'collisionStart', (event) => {
+    if (!this.Matter) return;
+    
+    this.Matter.Events.on(this.engine, 'collisionStart', (event: any) => {
       const pairs = event.pairs;
       
       for (let pair of pairs) {
@@ -133,14 +176,17 @@ export default class PhysicsEngine {
     });
   }
 
-  createPlayer(x: number, y: number): Spaceship {
+  async createPlayer(x: number, y: number): Promise<Spaceship | null> {
+    if (!this.Matter) return null;
+    
     this.player = new Spaceship(x, y);
-    Matter.Composite.add(this.engine.world, this.player.body);
+    await this.player.createMatterBody(this.Matter);
+    this.Matter.Composite.add(this.engine.world, this.player.body);
     return this.player;
   }
 
   update() {
-    if (!this.player) return;
+    if (!this.player || !this.Matter || !this.isInitialized) return;
 
     // Handle input
     this.handlePlayerInput();
@@ -151,7 +197,7 @@ export default class PhysicsEngine {
   }
 
   private handlePlayerInput() {
-    if (!this.player) return;
+    if (!this.player || !this.Matter) return;
 
     const thrustForce = 0.001;
     let thrust = { x: 0, y: 0 };
@@ -174,7 +220,7 @@ export default class PhysicsEngine {
       thrust.x = Math.cos(radians) * thrustForce;
       thrust.y = Math.sin(radians) * thrustForce;
       
-      Matter.Body.applyForce(this.player.body, this.player.body.position, thrust);
+      this.Matter.Body.applyForce(this.player.body, this.player.body.position, thrust);
       this.player.isThrusting = true;
     } else {
       this.player.isThrusting = false;
@@ -185,16 +231,18 @@ export default class PhysicsEngine {
     if (!this.player) return null;
     
     return {
-      position: this.player.body.position,
-      velocity: this.player.body.velocity,
+      position: this.player.body.position || { x: 0, y: 0 },
+      velocity: this.player.body.velocity || { x: 0, y: 0 },
       direction: this.player.direction,
       isAlive: this.player.isAlive
     };
   }
 
   destroy() {
-    Matter.Render.stop(this.render);
-    Matter.Runner.stop(this.runner);
-    Matter.Engine.clear(this.engine);
+    if (!this.Matter || !this.render || !this.runner) return;
+    
+    this.Matter.Render.stop(this.render);
+    this.Matter.Runner.stop(this.runner);
+    this.Matter.Engine.clear(this.engine);
   }
 }
