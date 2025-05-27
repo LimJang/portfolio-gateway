@@ -17,6 +17,12 @@ interface GamePlayer {
   color: string;
 }
 
+interface SpawnPoint {
+  x: number;
+  y: number;
+  direction: number; // 중앙을 향하는 방향
+}
+
 export default class MultiplayerPhysicsEngine {
   private engine: any;
   private render: any;
@@ -29,6 +35,8 @@ export default class MultiplayerPhysicsEngine {
   private currentPlayerId: string;
   private onPlayerUpdate: (playerId: string, data: any) => void;
   private onPlayerDeath: (playerId: string) => void;
+  private spawnPoints: SpawnPoint[] = [];
+  private usedSpawnPoints: Set<number> = new Set();
 
   constructor(
     canvas: HTMLCanvasElement, 
@@ -40,7 +48,62 @@ export default class MultiplayerPhysicsEngine {
     this.currentPlayerId = currentPlayerId;
     this.onPlayerUpdate = onPlayerUpdate;
     this.onPlayerDeath = onPlayerDeath;
+    this.initializeSpawnPoints();
     this.initializeMatter();
+  }
+
+  // 8방향 스폰 포인트 초기화
+  private initializeSpawnPoints() {
+    const centerX = 400;
+    const centerY = 300;
+    const spawnRadius = 200; // 중앙에서 200픽셀 떨어진 거리
+    
+    // 8방향으로 스폰 포인트 생성
+    for (let i = 0; i < 8; i++) {
+      const angle = (i * 45) * (Math.PI / 180); // 45도씩 분할
+      const x = centerX + Math.cos(angle) * spawnRadius;
+      const y = centerY + Math.sin(angle) * spawnRadius;
+      
+      // 중앙을 향하는 방향 계산 (스폰 시 플레이어가 중앙을 바라보도록)
+      const directionToCenter = (angle + Math.PI) * (180 / Math.PI); // 반대 방향
+      
+      this.spawnPoints.push({
+        x: Math.max(50, Math.min(750, x)), // 화면 경계 안전 범위
+        y: Math.max(50, Math.min(550, y)),
+        direction: directionToCenter
+      });
+    }
+  }
+
+  // 사용 가능한 스폰 포인트 선택
+  private getAvailableSpawnPoint(): SpawnPoint {
+    // 사용되지 않은 스폰 포인트 찾기
+    for (let i = 0; i < this.spawnPoints.length; i++) {
+      if (!this.usedSpawnPoints.has(i)) {
+        this.usedSpawnPoints.add(i);
+        return this.spawnPoints[i];
+      }
+    }
+    
+    // 모든 스폰 포인트가 사용된 경우, 가장 오래된 것 재사용
+    const oldestIndex = Math.min(...this.usedSpawnPoints);
+    return this.spawnPoints[oldestIndex];
+  }
+
+  // 스폰 포인트 해제
+  private releaseSpawnPoint(position: { x: number, y: number }) {
+    const threshold = 50; // 허용 오차
+    for (let i = 0; i < this.spawnPoints.length; i++) {
+      const spawn = this.spawnPoints[i];
+      const distance = Math.sqrt(
+        Math.pow(spawn.x - position.x, 2) + Math.pow(spawn.y - position.y, 2)
+      );
+      
+      if (distance < threshold) {
+        this.usedSpawnPoints.delete(i);
+        break;
+      }
+    }
   }
 
   private async initializeMatter() {
@@ -116,21 +179,23 @@ export default class MultiplayerPhysicsEngine {
   private async createObstacles() {
     if (!this.Matter) return;
     
-    // Create a satellite (heavy, slow-moving obstacle)
-    const satellite = new Satellite(400, 200, 30);
+    // Create a satellite (heavy, slow-moving obstacle) - 중앙에 배치
+    const satellite = new Satellite(400, 300, 30);
     await satellite.createMatterBody(this.Matter);
     this.Matter.Composite.add(this.engine.world, satellite.body);
     this.obstacles.push(satellite);
 
-    // Create some asteroids
-    const asteroid1 = new Asteroid(200, 400, 15, 'medium');
-    const asteroid2 = new Asteroid(600, 150, 10, 'small');
+    // Create some asteroids - 스폰 포인트와 겹치지 않는 위치에 배치
+    const asteroid1 = new Asteroid(250, 200, 15, 'medium');
+    const asteroid2 = new Asteroid(550, 400, 10, 'small');
+    const asteroid3 = new Asteroid(350, 450, 12, 'small');
     
     await asteroid1.createMatterBody(this.Matter);
     await asteroid2.createMatterBody(this.Matter);
+    await asteroid3.createMatterBody(this.Matter);
     
-    this.Matter.Composite.add(this.engine.world, [asteroid1.body, asteroid2.body]);
-    this.obstacles.push(asteroid1, asteroid2);
+    this.Matter.Composite.add(this.engine.world, [asteroid1.body, asteroid2.body, asteroid3.body]);
+    this.obstacles.push(asteroid1, asteroid2, asteroid3);
   }
 
   private setupCollisionDetection() {
@@ -152,6 +217,9 @@ export default class MultiplayerPhysicsEngine {
         if (otherBody.label === 'death_boundary') {
           playerBody.isAlive = false;
           
+          // Release spawn point when player dies
+          this.releaseSpawnPoint(playerBody.body.position);
+          
           // Find player ID and notify
           const playerId = Object.keys(this.players).find(id => this.players[id] === playerBody);
           if (playerId) {
@@ -169,9 +237,14 @@ export default class MultiplayerPhysicsEngine {
     let player = this.players[playerData.id];
     
     if (!player) {
-      // Create new player
-      player = new Spaceship(playerData.position_x, playerData.position_y);
+      // Create new player with spawn point
+      const spawnPoint = this.getAvailableSpawnPoint();
+      
+      player = new Spaceship(spawnPoint.x, spawnPoint.y);
       await player.createMatterBody(this.Matter);
+      
+      // Set initial direction to face center
+      player.direction = spawnPoint.direction;
       
       // Set player color
       if (player.body && player.body.render) {
@@ -180,9 +253,18 @@ export default class MultiplayerPhysicsEngine {
       
       this.Matter.Composite.add(this.engine.world, player.body);
       this.players[playerData.id] = player;
+      
+      console.log(`Player ${playerData.display_name} spawned at (${Math.round(spawnPoint.x)}, ${Math.round(spawnPoint.y)}) facing ${Math.round(spawnPoint.direction)}°`);
     } else {
-      // Update existing player position and state
-      if (player.body) {
+      // Update existing player position and state (only if significant change)
+      const currentPos = player.body.position;
+      const distance = Math.sqrt(
+        Math.pow(currentPos.x - playerData.position_x, 2) + 
+        Math.pow(currentPos.y - playerData.position_y, 2)
+      );
+      
+      // Only update if position changed significantly (prevents jitter)
+      if (distance > 5) {
         this.Matter.Body.setPosition(player.body, {
           x: playerData.position_x,
           y: playerData.position_y
@@ -192,9 +274,9 @@ export default class MultiplayerPhysicsEngine {
           x: playerData.velocity_x,
           y: playerData.velocity_y
         });
-        
-        this.Matter.Body.setAngle(player.body, (playerData.direction * Math.PI) / 180);
       }
+      
+      this.Matter.Body.setAngle(player.body, ((playerData.direction - 90) * Math.PI) / 180);
       
       player.direction = playerData.direction;
       player.isAlive = playerData.is_alive;
@@ -206,6 +288,9 @@ export default class MultiplayerPhysicsEngine {
   removePlayer(playerId: string) {
     const player = this.players[playerId];
     if (player && player.body && this.Matter) {
+      // Release spawn point
+      this.releaseSpawnPoint(player.body.position);
+      
       this.Matter.Composite.remove(this.engine.world, player.body);
       delete this.players[playerId];
     }
@@ -302,11 +387,17 @@ export default class MultiplayerPhysicsEngine {
     return this.obstacles;
   }
 
+  // Get spawn points for debugging (optional)
+  getSpawnPoints() {
+    return this.spawnPoints;
+  }
+
   // Clean up
   destroy() {
     if (!this.Matter || !this.runner) return;
     
     this.Matter.Runner.stop(this.runner);
     this.Matter.Engine.clear(this.engine);
+    this.usedSpawnPoints.clear();
   }
 }

@@ -48,6 +48,7 @@ export default function MultiplayerGameCanvas({
     direction: 0,
     alive_players: 0
   });
+  const [showSpawnPoints, setShowSpawnPoints] = useState(false); // 디버그용
 
   // Initialize physics engine
   useEffect(() => {
@@ -118,6 +119,11 @@ export default function MultiplayerGameCanvas({
       // Prevent space bar from scrolling
       if (event.key === ' ') {
         event.preventDefault();
+      }
+
+      // Debug: Toggle spawn points with 'S' key
+      if (key === 's' && event.ctrlKey) {
+        setShowSpawnPoints(prev => !prev);
       }
     };
 
@@ -206,6 +212,37 @@ export default function MultiplayerGameCanvas({
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 3;
       ctx.strokeRect(0, 0, 800, 600);
+
+      // Draw spawn points (debug mode)
+      if (showSpawnPoints && physicsEngineRef.current) {
+        const spawnPoints = physicsEngineRef.current.getSpawnPoints();
+        spawnPoints.forEach((spawn, index) => {
+          ctx.strokeStyle = '#ffff00';
+          ctx.fillStyle = '#ffff00';
+          ctx.lineWidth = 2;
+          
+          // Draw spawn circle
+          ctx.beginPath();
+          ctx.arc(spawn.x, spawn.y, 15, 0, 2 * Math.PI);
+          ctx.stroke();
+          
+          // Draw direction arrow
+          const arrowLength = 25;
+          const radians = (spawn.direction * Math.PI) / 180;
+          const endX = spawn.x + Math.cos(radians) * arrowLength;
+          const endY = spawn.y + Math.sin(radians) * arrowLength;
+          
+          ctx.beginPath();
+          ctx.moveTo(spawn.x, spawn.y);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+          
+          // Draw spawn number
+          ctx.font = '12px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`S${index + 1}`, spawn.x, spawn.y - 20);
+        });
+      }
 
       // Draw obstacles
       const obstacles = physicsEngineRef.current!.getObstacles();
@@ -323,7 +360,7 @@ export default function MultiplayerGameCanvas({
 
     const renderInterval = setInterval(render, 1000 / 60);
     return () => clearInterval(renderInterval);
-  }, [players, currentPlayer]);
+  }, [players, currentPlayer, showSpawnPoints]);
 
   // Game end check
   useEffect(() => {
@@ -357,6 +394,7 @@ export default function MultiplayerGameCanvas({
           <div>DIR: {Math.round(gameStats.direction)}°</div>
           <div>ALIVE: {gameStats.alive_players}</div>
           <div className="text-yellow-400">⚡ PHYSICS: ON</div>
+          <div className="text-cyan-400">🎯 SPAWN: DISTRIBUTED</div>
         </div>
       </div>
 
@@ -388,7 +426,14 @@ export default function MultiplayerGameCanvas({
           <div>A/D: Rotate</div>
           <div>SPACE: Thrust</div>
           <div className="text-cyan-400">⚡ Real Physics!</div>
+          <div className="text-yellow-400">🎯 8-Point Spawn</div>
+          {showSpawnPoints && <div className="text-yellow-400">👁️ Spawn Points: ON</div>}
         </div>
+      </div>
+
+      {/* Debug Info */}
+      <div className="absolute bottom-4 right-4 bg-black/80 border border-gray-600 rounded p-2 text-xs text-gray-400">
+        <div>Ctrl+S: Toggle Spawn Points</div>
       </div>
 
       {/* Death Overlay */}
