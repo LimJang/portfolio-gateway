@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import GameCanvas from './components/GameCanvas';
 
 export default function ZeroGCombatPage() {
   const [gameStarted, setGameStarted] = useState(false);
+  const router = useRouter();
 
   return (
     <div className="min-h-screen bg-gray-900 text-green-400 font-mono">
@@ -35,11 +37,11 @@ export default function ZeroGCombatPage() {
                 </button>
                 
                 <button 
-                  disabled
-                  className="w-full px-6 py-4 border border-gray-600 bg-transparent 
-                           text-gray-600 rounded cursor-not-allowed"
+                  onClick={() => router.push('/zero-g-combat/rooms')}
+                  className="w-full px-6 py-4 border border-cyan-400 bg-transparent hover:bg-cyan-400/10 
+                           text-cyan-400 transition-colors duration-200 rounded"
                 >
-                  [SOON] Multiplayer Rooms
+                  🚀 [MULTIPLAYER] Join Battle Rooms
                 </button>
                 
                 <button 
@@ -57,6 +59,15 @@ export default function ZeroGCombatPage() {
                   <p>• A/D: Rotate ship left/right</p>
                   <p>• SPACE: Thrust forward</p>
                   <p>• Goal: Push enemies into boundary walls</p>
+                </div>
+              </div>
+
+              <div className="mt-4 p-4 border border-cyan-400/30 rounded bg-cyan-400/5">
+                <h3 className="text-lg mb-2 text-cyan-400">MULTIPLAYER:</h3>
+                <div className="text-sm space-y-1 text-cyan-300">
+                  <p>• Create or join rooms with up to 8 players</p>
+                  <p>• Real-time battles with friends</p>
+                  <p>• Last ship standing wins!</p>
                 </div>
               </div>
             </div>

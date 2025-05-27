@@ -223,7 +223,7 @@ export default class PhysicsEngine {
     if (this.keys[' ']) {
       // 삼각형이 위쪽(0도)을 향하도록 설정되어 있으므로
       // direction에서 90도를 빼서 올바른 방향으로 추진
-      const radians = ((this.player.direction - 90) * Math.PI) / 180;
+      const radians = ((this.player.direction - 180) * Math.PI) / 180;
       const thrust = {
         x: Math.cos(radians) * thrustForce,
         y: Math.sin(radians) * thrustForce
