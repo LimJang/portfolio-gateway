@@ -4,6 +4,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Terminal from './components/Terminal'
+import { MISSIONS, createMissionController, MissionController } from '../../lib/game/MissionController'
+import { TypingStats } from '../../lib/game/TypingEngine'
 
 interface AuthUser {
   id: string
@@ -12,9 +15,21 @@ interface AuthUser {
   loginTime: string
 }
 
+type GameState = 'menu' | 'mission-select' | 'mission-briefing' | 'playing' | 'mission-complete'
+
 export default function HackerSimulatorPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [gameState, setGameState] = useState<GameState>('menu')
+  const [currentMissionId, setCurrentMissionId] = useState<number | null>(null)
+  const [missionController, setMissionController] = useState<MissionController | null>(null)
+  const [playerStats, setPlayerStats] = useState({
+    totalScore: 0,
+    bestWPM: 0,
+    averageAccuracy: 0,
+    completedMissions: 0
+  })
+  
   const router = useRouter()
 
   // 관리자 체크
@@ -22,7 +37,7 @@ export default function HackerSimulatorPage() {
     return user.username.toLowerCase() === 'admin'
   }
 
-  // 인증 체크
+  // 인증 체크 및 게임 초기화
   useEffect(() => {
     const checkAuth = () => {
       try {
@@ -34,6 +49,20 @@ export default function HackerSimulatorPage() {
 
         const user = JSON.parse(userSession)
         setAuthUser(user)
+        
+        // 게임 컨트롤러 초기화
+        const controller = createMissionController()
+        setMissionController(controller)
+        
+        // 플레이어 통계 로드
+        const overallProgress = controller.getOverallProgress()
+        setPlayerStats({
+          totalScore: overallProgress.totalScore,
+          bestWPM: overallProgress.averageWPM,
+          averageAccuracy: 0, // TODO: 구현 필요
+          completedMissions: overallProgress.completedMissions
+        })
+        
       } catch (error) {
         console.error('Auth check error:', error)
         router.push('/auth')
@@ -48,6 +77,56 @@ export default function HackerSimulatorPage() {
   const handleLogout = () => {
     sessionStorage.removeItem('auth_user')
     router.push('/auth')
+  }
+
+  const handleStartMission = (missionId: number) => {
+    if (!missionController) return
+    
+    const mission = missionController.startMission(missionId)
+    if (mission) {
+      setCurrentMissionId(missionId)
+      setGameState('mission-briefing')
+    }
+  }
+
+  const handleStartPlaying = () => {
+    setGameState('playing')
+  }
+
+  const handleMissionComplete = (stats: TypingStats) => {
+    if (!missionController || !currentMissionId) return
+    
+    const mission = MISSIONS.find(m => m.id === currentMissionId)
+    if (!mission) return
+    
+    const timeElapsed = (stats.currentTime.getTime() - stats.startTime.getTime()) / 1000
+    const result = missionController.calculateScore(mission, stats.wpm, stats.accuracy, timeElapsed)
+    
+    missionController.completeMission(currentMissionId, result)
+    
+    // 통계 업데이트
+    const overallProgress = missionController.getOverallProgress()
+    setPlayerStats({
+      totalScore: overallProgress.totalScore,
+      bestWPM: Math.max(playerStats.bestWPM, stats.wpm),
+      averageAccuracy: stats.accuracy,
+      completedMissions: overallProgress.completedMissions
+    })
+    
+    setGameState('mission-complete')
+  }
+
+  const handleBackToMenu = () => {
+    setGameState('menu')
+    setCurrentMissionId(null)
+  }
+
+  const handleNextMission = () => {
+    if (currentMissionId && currentMissionId < MISSIONS.length) {
+      handleStartMission(currentMissionId + 1)
+    } else {
+      handleBackToMenu()
+    }
   }
 
   // 인증 로딩 중
@@ -73,6 +152,8 @@ export default function HackerSimulatorPage() {
 
   if (!authUser) return null
 
+  const currentMission = currentMissionId ? MISSIONS.find(m => m.id === currentMissionId) : null
+
   return (
     <div className="min-h-screen bg-black text-green-400 flex flex-col crt-effect font-mono">
       {/* Header */}
@@ -86,6 +167,11 @@ export default function HackerSimulatorPage() {
             <div className="flex items-center space-x-2">
               <span className="text-xs md:text-sm font-bold">USER:</span>
               <span className="text-orange-400 font-bold">{authUser.displayName}</span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <span className="text-xs md:text-sm font-bold">SCORE:</span>
+              <span className="text-yellow-400 font-bold">{playerStats.totalScore}</span>
             </div>
 
             {isAdmin(authUser) && (
@@ -109,72 +195,234 @@ export default function HackerSimulatorPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-8">
-        <div className="max-w-4xl w-full">
-          <div className="retro-border p-8 bg-black bg-opacity-80">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl md:text-4xl retro-glow font-bold mb-4">
-                HACKER SIMULATOR
-              </h2>
-              <p className="text-lg text-gray-400 font-bold">
-                Test your typing skills in this terminal hacking game
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Game Options */}
-              <div className="space-y-4">
-                <button className="w-full retro-button p-4 text-left border-green-400 text-green-400 hover:bg-green-400 hover:text-black font-bold">
-                  <div className="text-lg mb-2">🎮 START NEW MISSION</div>
-                  <div className="text-sm text-gray-400">Begin hacking simulation</div>
-                </button>
-
-                <button className="w-full retro-button p-4 text-left border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-black font-bold">
-                  <div className="text-lg mb-2">🏆 LEADERBOARD</div>
-                  <div className="text-sm text-gray-400">View top hackers</div>
-                </button>
-
-                <button className="w-full retro-button p-4 text-left border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black font-bold">
-                  <div className="text-lg mb-2">💪 TRAINING MODE</div>
-                  <div className="text-sm text-gray-400">Practice your skills</div>
-                </button>
+      <main className="flex-1 p-4 md:p-8">
+        <div className="max-w-6xl mx-auto">
+          
+          {/* Menu State */}
+          {gameState === 'menu' && (
+            <div className="retro-border p-8 bg-black bg-opacity-80">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl md:text-4xl retro-glow font-bold mb-4">
+                  HACKER SIMULATOR
+                </h2>
+                <p className="text-lg text-gray-400 font-bold">
+                  Test your typing skills in this terminal hacking game
+                </p>
               </div>
 
-              {/* Stats Panel */}
-              <div className="retro-border p-6 bg-gray-900 bg-opacity-50">
-                <h3 className="text-xl font-bold mb-4 text-green-400">&gt; PLAYER STATS</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="font-bold">BEST SCORE:</span>
-                    <span className="text-yellow-400 font-bold">-- PTS</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-bold">MAX WPM:</span>
-                    <span className="text-blue-400 font-bold">-- WPM</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-bold">ACCURACY:</span>
-                    <span className="text-green-400 font-bold">--%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-bold">MISSIONS:</span>
-                    <span className="text-red-400 font-bold">0/5</span>
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Game Options */}
+                <div className="space-y-4">
+                  <button 
+                    onClick={() => setGameState('mission-select')}
+                    className="w-full retro-button p-4 text-left border-green-400 text-green-400 hover:bg-green-400 hover:text-black font-bold"
+                  >
+                    <div className="text-lg mb-2">🎮 START NEW MISSION</div>
+                    <div className="text-sm text-gray-400">Begin hacking simulation</div>
+                  </button>
+
+                  <button className="w-full retro-button p-4 text-left border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-black font-bold">
+                    <div className="text-lg mb-2">🏆 LEADERBOARD</div>
+                    <div className="text-sm text-gray-400">View top hackers</div>
+                  </button>
+
+                  <button 
+                    onClick={() => handleStartMission(1)}
+                    className="w-full retro-button p-4 text-left border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black font-bold"
+                  >
+                    <div className="text-lg mb-2">💪 QUICK START</div>
+                    <div className="text-sm text-gray-400">Jump into Mission 1</div>
+                  </button>
+                </div>
+
+                {/* Stats Panel */}
+                <div className="retro-border p-6 bg-gray-900 bg-opacity-50">
+                  <h3 className="text-xl font-bold mb-4 text-green-400">&gt; PLAYER STATS</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="font-bold">TOTAL SCORE:</span>
+                      <span className="text-yellow-400 font-bold">{playerStats.totalScore} PTS</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-bold">BEST WPM:</span>
+                      <span className="text-blue-400 font-bold">{playerStats.bestWPM} WPM</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-bold">ACCURACY:</span>
+                      <span className="text-green-400 font-bold">{playerStats.averageAccuracy}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-bold">MISSIONS:</span>
+                      <span className="text-red-400 font-bold">{playerStats.completedMissions}/5</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          )}
 
-            {/* Instructions */}
-            <div className="mt-8 retro-border p-6 bg-gray-900 bg-opacity-30">
-              <h4 className="text-green-400 text-lg mb-4 font-bold">&gt; GAME INSTRUCTIONS</h4>
-              <ul className="text-sm text-gray-400 space-y-2">
-                <li className="font-bold">&gt; Type commands exactly as shown</li>
-                <li className="font-bold">&gt; Speed and accuracy determine your score</li>
-                <li className="font-bold">&gt; Complete all 5 missions to become elite hacker</li>
-                <li className="font-bold">&gt; Each mission has time limits and objectives</li>
-              </ul>
+          {/* Mission Select State */}
+          {gameState === 'mission-select' && (
+            <div className="retro-border p-8 bg-black bg-opacity-80">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-2xl md:text-3xl retro-glow font-bold">
+                  SELECT MISSION
+                </h2>
+                <button 
+                  onClick={handleBackToMenu}
+                  className="retro-button border-red-400 text-red-400 hover:bg-red-400 hover:text-black px-4 py-2"
+                >
+                  BACK
+                </button>
+              </div>
+
+              <div className="grid gap-4">
+                {MISSIONS.map((mission) => {
+                  const progress = missionController?.getProgress(mission.id)
+                  const isUnlocked = missionController?.isNextMissionUnlocked(mission.id)
+                  
+                  return (
+                    <div 
+                      key={mission.id}
+                      className={`retro-border p-4 ${isUnlocked ? 'bg-gray-900 bg-opacity-50' : 'bg-gray-800 bg-opacity-30'}`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-4 mb-2">
+                            <h3 className="text-lg font-bold text-green-400">
+                              Mission {mission.id}: {mission.title}
+                            </h3>
+                            <span className={`text-xs px-2 py-1 rounded border ${
+                              mission.difficulty === 'easy' ? 'border-green-400 text-green-400' :
+                              mission.difficulty === 'medium' ? 'border-yellow-400 text-yellow-400' :
+                              'border-red-400 text-red-400'
+                            }`}>
+                              {mission.difficulty.toUpperCase()}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-400 mb-2">{mission.description}</p>
+                          <div className="text-xs text-gray-500">
+                            Target: {mission.targetWPM} WPM | Time Limit: {Math.floor(mission.timeLimit / 60)}:{(mission.timeLimit % 60).toString().padStart(2, '0')}
+                          </div>
+                          {progress?.isCompleted && (
+                            <div className="text-xs text-blue-400 mt-1">
+                              ✅ Completed | Best: {progress.bestWPM} WPM | Score: {progress.bestScore}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleStartMission(mission.id)}
+                          disabled={!isUnlocked}
+                          className={`retro-button px-4 py-2 ${
+                            isUnlocked 
+                              ? 'border-green-400 text-green-400 hover:bg-green-400 hover:text-black'
+                              : 'border-gray-600 text-gray-600 cursor-not-allowed'
+                          }`}
+                        >
+                          {isUnlocked ? 'START' : 'LOCKED'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Mission Briefing State */}
+          {gameState === 'mission-briefing' && currentMission && (
+            <div className="retro-border p-8 bg-black bg-opacity-80">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl md:text-3xl retro-glow font-bold mb-4">
+                  {currentMission.title}
+                </h2>
+                <p className="text-lg text-gray-400">{currentMission.description}</p>
+              </div>
+
+              <div className="retro-border p-6 bg-gray-900 bg-opacity-50 mb-8">
+                <div className="space-y-2">
+                  {currentMission.storyText.map((line, index) => (
+                    <div key={index} className="text-green-400 font-bold">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-center space-x-4">
+                <button 
+                  onClick={handleBackToMenu}
+                  className="retro-button border-red-400 text-red-400 hover:bg-red-400 hover:text-black px-6 py-3"
+                >
+                  ABORT MISSION
+                </button>
+                <button 
+                  onClick={handleStartPlaying}
+                  className="retro-button border-green-400 text-green-400 hover:bg-green-400 hover:text-black px-6 py-3"
+                >
+                  BEGIN INFILTRATION
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Playing State */}
+          {gameState === 'playing' && currentMission && (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-green-400">
+                  Mission {currentMission.id}: {currentMission.title}
+                </h2>
+                <button 
+                  onClick={handleBackToMenu}
+                  className="retro-button border-red-400 text-red-400 hover:bg-red-400 hover:text-black px-4 py-2"
+                >
+                  ABORT
+                </button>
+              </div>
+              
+              <Terminal
+                targetText={currentMission.commands.join('\n')}
+                onComplete={handleMissionComplete}
+                onKeystroke={(key, isCorrect) => {
+                  // TODO: 사운드 효과 추가
+                }}
+                isActive={true}
+                className="w-full"
+              />
+            </div>
+          )}
+
+          {/* Mission Complete State */}
+          {gameState === 'mission-complete' && currentMission && (
+            <div className="retro-border p-8 bg-black bg-opacity-80 text-center">
+              <div className="text-4xl mb-4">🎉</div>
+              <h2 className="text-2xl md:text-3xl retro-glow font-bold mb-4">
+                MISSION COMPLETE
+              </h2>
+              <p className="text-lg text-green-400 mb-8">
+                {currentMission.completionMessage}
+              </p>
+
+              <div className="flex justify-center space-x-4">
+                <button 
+                  onClick={handleBackToMenu}
+                  className="retro-button border-blue-400 text-blue-400 hover:bg-blue-400 hover:text-black px-6 py-3"
+                >
+                  MAIN MENU
+                </button>
+                {currentMissionId && currentMissionId < MISSIONS.length && (
+                  <button 
+                    onClick={handleNextMission}
+                    className="retro-button border-green-400 text-green-400 hover:bg-green-400 hover:text-black px-6 py-3"
+                  >
+                    NEXT MISSION
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
 
