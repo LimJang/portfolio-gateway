@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import MultiplayerPhysicsEngine from './MultiplayerPhysicsEngine';
 
 interface GameRoom {
@@ -48,21 +49,53 @@ export default function MultiplayerGameCanvas({
     direction: 0,
     alive_players: 0
   });
-  const [showSpawnPoints, setShowSpawnPoints] = useState(false); // 디버그용
+  const [showSpawnPoints, setShowSpawnPoints] = useState(false);
+  const lastUpdateRef = useRef<number>(0);
 
   // Initialize physics engine
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const handlePlayerUpdate = (playerId: string, data: any) => {
-      // This would normally send to server, but for now we'll handle locally
-      // In production, this would update the database
+    // 실제 Supabase 업데이트 함수 구현
+    const handlePlayerUpdate = async (playerId: string, data: any) => {
+      // 너무 자주 업데이트하지 않도록 쓰로틀링 (60fps → 20fps)
+      const now = Date.now();
+      if (now - lastUpdateRef.current < 50) return; // 50ms = 20fps
+      lastUpdateRef.current = now;
+
+      try {
+        await supabase
+          .from('game_players')
+          .update({
+            position_x: data.position_x,
+            position_y: data.position_y,
+            velocity_x: data.velocity_x,
+            velocity_y: data.velocity_y,
+            direction: data.direction,
+            is_thrusting: data.is_thrusting,
+            last_update: new Date().toISOString()
+          })
+          .eq('id', playerId);
+        
+        console.log(`Updated player ${playerId} position: (${Math.round(data.position_x)}, ${Math.round(data.position_y)})`);
+      } catch (error) {
+        console.error('Failed to update player position:', error);
+      }
     };
 
-    const handlePlayerDeath = (playerId: string) => {
-      if (playerId === currentPlayer.id) {
-        // Current player died
-        console.log('Current player died!');
+    const handlePlayerDeath = async (playerId: string) => {
+      try {
+        await supabase
+          .from('game_players')
+          .update({
+            is_alive: false,
+            last_update: new Date().toISOString()
+          })
+          .eq('id', playerId);
+
+        console.log(`Player ${playerId} died - updated database`);
+      } catch (error) {
+        console.error('Failed to update player death:', error);
       }
     };
 
@@ -99,7 +132,7 @@ export default function MultiplayerGameCanvas({
         physicsEngineRef.current.destroy();
       }
     };
-  }, [currentPlayer.id]);
+  }, [currentPlayer.id, room.id]);
 
   // Update players in physics engine when data changes
   useEffect(() => {
@@ -171,7 +204,7 @@ export default function MultiplayerGameCanvas({
         inputProcessed = true;
       }
 
-      // Update physics
+      // Update physics (이 부분에서 handlePlayerUpdate가 호출됨)
       physicsEngineRef.current.update();
 
       // Update stats from physics engine
@@ -332,14 +365,22 @@ export default function MultiplayerGameCanvas({
         if (id === currentPlayer.id) {
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]); // 점선으로 현재 플레이어 강조
           ctx.strokeRect(
             body.position.x - 20,
             body.position.y - 20,
             40,
             40
           );
+          ctx.setLineDash([]); // 점선 해제
         }
       });
+
+      // Draw connection status
+      ctx.fillStyle = '#00ff00';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('🔗 REALTIME SYNC: ON', 10, 580);
 
       // Draw grid
       ctx.strokeStyle = '#333333';
@@ -395,6 +436,7 @@ export default function MultiplayerGameCanvas({
           <div>ALIVE: {gameStats.alive_players}</div>
           <div className="text-yellow-400">⚡ PHYSICS: ON</div>
           <div className="text-cyan-400">🎯 SPAWN: DISTRIBUTED</div>
+          <div className="text-green-400">🔗 SYNC: REALTIME</div>
         </div>
       </div>
 
@@ -415,6 +457,7 @@ export default function MultiplayerGameCanvas({
                 {player.display_name}
               </span>
               {!player.is_alive && <span className="text-red-400">💀</span>}
+              {player.user_id === currentPlayer.user_id && <span className="text-cyan-400">⭐</span>}
             </div>
           ))}
         </div>
@@ -427,13 +470,18 @@ export default function MultiplayerGameCanvas({
           <div>SPACE: Thrust</div>
           <div className="text-cyan-400">⚡ Real Physics!</div>
           <div className="text-yellow-400">🎯 8-Point Spawn</div>
+          <div className="text-green-400">🔗 Live Sync</div>
           {showSpawnPoints && <div className="text-yellow-400">👁️ Spawn Points: ON</div>}
         </div>
       </div>
 
-      {/* Debug Info */}
-      <div className="absolute bottom-4 right-4 bg-black/80 border border-gray-600 rounded p-2 text-xs text-gray-400">
-        <div>Ctrl+S: Toggle Spawn Points</div>
+      {/* Network Status */}
+      <div className="absolute bottom-4 right-4 bg-black/80 border border-green-600 rounded p-2 text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          <div className="text-green-400">MULTIPLAYER SYNC</div>
+        </div>
+        <div className="text-gray-400 text-xs">Ctrl+S: Toggle Spawns</div>
       </div>
 
       {/* Death Overlay */}

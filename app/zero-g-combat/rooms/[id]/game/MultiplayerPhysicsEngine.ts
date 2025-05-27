@@ -233,57 +233,63 @@ export default class MultiplayerPhysicsEngine {
 
   // Add or update a player in the physics world
   async addOrUpdatePlayer(playerData: GamePlayer) {
-    if (!this.Matter || !this.isInitialized) return;
+  if (!this.Matter || !this.isInitialized) return;
 
-    let player = this.players[playerData.id];
+  let player = this.players[playerData.id];
+  
+  if (!player) {
+    // Create new player with spawn point
+    const spawnPoint = this.getAvailableSpawnPoint();
     
-    if (!player) {
-      // Create new player with spawn point
-      const spawnPoint = this.getAvailableSpawnPoint();
-      
-      player = new Spaceship(spawnPoint.x, spawnPoint.y);
-      await player.createMatterBody(this.Matter);
-      
-      // Set initial direction to face center
-      player.direction = spawnPoint.direction;
-      
-      // Set player color
-      if (player.body && player.body.render) {
-        player.body.render.fillStyle = playerData.color;
-      }
-      
-      this.Matter.Composite.add(this.engine.world, player.body);
-      this.players[playerData.id] = player;
-      
-      console.log(`Player ${playerData.display_name} spawned at (${Math.round(spawnPoint.x)}, ${Math.round(spawnPoint.y)}) facing ${Math.round(spawnPoint.direction)}°`);
-    } else {
-      // Update existing player position and state (only if significant change)
-      const currentPos = player.body.position;
-      const distance = Math.sqrt(
-        Math.pow(currentPos.x - playerData.position_x, 2) + 
-        Math.pow(currentPos.y - playerData.position_y, 2)
-      );
-      
-      // Only update if position changed significantly (prevents jitter)
-      if (distance > 5) {
-        this.Matter.Body.setPosition(player.body, {
-          x: playerData.position_x,
-          y: playerData.position_y
-        });
-        
-        this.Matter.Body.setVelocity(player.body, {
-          x: playerData.velocity_x,
-          y: playerData.velocity_y
-        });
-      }
-      
-      this.Matter.Body.setAngle(player.body, ((playerData.direction - 90) * Math.PI) / 180);
-      
-      player.direction = playerData.direction;
-      player.isAlive = playerData.is_alive;
-      player.isThrusting = playerData.is_thrusting;
+    player = new Spaceship(spawnPoint.x, spawnPoint.y);
+    await player.createMatterBody(this.Matter);
+    
+    // Set initial direction to face center
+    player.direction = spawnPoint.direction;
+    
+    // Set player color
+    if (player.body && player.body.render) {
+      player.body.render.fillStyle = playerData.color;
     }
+    
+    this.Matter.Composite.add(this.engine.world, player.body);
+    this.players[playerData.id] = player;
+    
+    console.log(`Player ${playerData.display_name} spawned at (${Math.round(spawnPoint.x)}, ${Math.round(spawnPoint.y)}) facing ${Math.round(spawnPoint.direction)}°`);
+  } else {
+    // Update existing player - BUT ONLY if position changed significantly
+    // AND only if it's not the initial spawn (avoid overwriting spawn positions)
+    const currentPos = player.body.position;
+    const distance = Math.sqrt(
+      Math.pow(currentPos.x - playerData.position_x, 2) + 
+      Math.pow(currentPos.y - playerData.position_y, 2)
+    );
+    
+    // Only update position if:
+    // 1. Distance changed significantly (>10px)
+    // 2. AND it's not the default spawn position (400,300)
+    // 3. AND player is alive (don't update dead players)
+    const isDefaultPosition = playerData.position_x === 400 && playerData.position_y === 300;
+    
+    if (distance > 10 && !isDefaultPosition && playerData.is_alive) {
+      this.Matter.Body.setPosition(player.body, {
+        x: playerData.position_x,
+        y: playerData.position_y
+      });
+      
+      this.Matter.Body.setVelocity(player.body, {
+        x: playerData.velocity_x,
+        y: playerData.velocity_y
+      });
+    }
+    
+    // Always update direction and state
+    this.Matter.Body.setAngle(player.body, ((playerData.direction - 90) * Math.PI) / 180);
+    player.direction = playerData.direction;
+    player.isAlive = playerData.is_alive;
+    player.isThrusting = playerData.is_thrusting;
   }
+}
 
   // Remove a player from physics world
   removePlayer(playerId: string) {
