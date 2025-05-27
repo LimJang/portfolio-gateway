@@ -53,10 +53,11 @@ export class Spaceship extends GameObject {
     if (!Matter) return this.body;
 
     // Create triangle shape for directional visibility
+    // 삼각형이 위쪽(0도)을 향하도록 설정
     const vertices = [
-      { x: 0, y: -15 },    // Front point
-      { x: -8, y: 10 },    // Back left
-      { x: 8, y: 10 }      // Back right
+      { x: 0, y: -15 },    // Front point (위쪽)
+      { x: -8, y: 10 },    // Back left (아래쪽 왼쪽)
+      { x: 8, y: 10 }      // Back right (아래쪽 오른쪽)
     ];
 
     this.body = Matter.Bodies.fromVertices(this.body.position.x, this.body.position.y, [vertices], {
@@ -76,8 +77,9 @@ export class Spaceship extends GameObject {
   public update() {
     if (!this.body || !this.body.render || !this.Matter) return;
     
-    // Rotate the body to match the direction
-    const targetAngle = (this.direction * Math.PI) / 180;
+    // 삼각형의 앞쪽이 direction과 일치하도록 회전
+    // direction 0도 = 위쪽, 90도 = 오른쪽, 180도 = 아래쪽, 270도 = 왼쪽
+    const targetAngle = ((this.direction - 90) * Math.PI) / 180;
     this.Matter.Body.setAngle(this.body, targetAngle);
     
     // Update visual representation based on thrust
