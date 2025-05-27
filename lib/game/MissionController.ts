@@ -253,7 +253,7 @@ export class MissionController {
         progress.bestScore = result.score
       }
       if (result.wpm > progress.bestWPM) {
-        progress.bestWPM = result.wmp
+        progress.bestWPM = result.wpm
       }
       if (result.accuracy > progress.bestAccuracy) {
         progress.bestAccuracy = result.accuracy
@@ -312,7 +312,7 @@ export class MissionController {
 
   // Calculate mission score
   calculateScore(mission: Mission, wpm: number, accuracy: number, timeElapsed: number): MissionResult {
-    const success = wmp >= mission.targetWPM && accuracy >= 80 && timeElapsed <= mission.timeLimit
+    const success = wpm >= mission.targetWPM && accuracy >= 80 && timeElapsed <= mission.timeLimit
     
     // Base score calculation
     const baseScore = wpm * accuracy / 100 * mission.scoreMultiplier
