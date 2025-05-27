@@ -34,14 +34,20 @@ export default function GameRoomPage() {
   const params = useParams();
   const roomId = params.id as string;
 
-  // 사용자 인증 확인
+  // 사용자 인증 확인 (실제 인증 시스템과 일치)
   useEffect(() => {
     const checkAuth = () => {
-      const userData = localStorage.getItem('user');
+      // sessionStorage에서 auth_user 키로 사용자 정보 확인
+      const userData = sessionStorage.getItem('auth_user');
       if (userData) {
-        setUser(JSON.parse(userData));
+        const parsedUser = JSON.parse(userData);
+        setUser({
+          id: parsedUser.id,
+          username: parsedUser.username,
+          display_name: parsedUser.displayName
+        });
       } else {
-        router.push('/auth/login?redirect=/zero-g-combat/rooms');
+        router.push('/auth?redirect=/zero-g-combat/rooms');
       }
     };
     

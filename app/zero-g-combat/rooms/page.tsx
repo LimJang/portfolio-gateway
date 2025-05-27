@@ -22,37 +22,68 @@ export default function GameRoomsPage() {
   const [newRoomName, setNewRoomName] = useState('');
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [supabaseReady, setSupabaseReady] = useState(false);
   const router = useRouter();
 
-  // 사용자 인증 확인
+  // Supabase 연결 체크
   useEffect(() => {
+    const checkSupabase = () => {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        console.error('Supabase configuration missing');
+        setSupabaseReady(false);
+        return;
+      }
+      
+      setSupabaseReady(true);
+    };
+    
+    checkSupabase();
+  }, []);
+
+  // 사용자 인증 확인 (실제 인증 시스템과 일치)
+  useEffect(() => {
+    if (!supabaseReady) return;
+    
     const checkAuth = () => {
-      const userData = localStorage.getItem('user');
+      // sessionStorage에서 auth_user 키로 사용자 정보 확인
+      const userData = sessionStorage.getItem('auth_user');
       if (userData) {
-        setUser(JSON.parse(userData));
+        const parsedUser = JSON.parse(userData);
+        setUser({
+          id: parsedUser.id,
+          username: parsedUser.username,
+          display_name: parsedUser.displayName
+        });
       } else {
-        router.push('/auth/login?redirect=/zero-g-combat/rooms');
+        router.push('/auth?redirect=/zero-g-combat/rooms');
       }
     };
     
     checkAuth();
-  }, [router]);
+  }, [router, supabaseReady]);
 
   // 게임 룸 목록 로드
   useEffect(() => {
-    if (!user) return;
+    if (!user || !supabaseReady) return;
     
     const loadRooms = async () => {
-      const { data, error } = await supabase
-        .from('game_rooms')
-        .select('*')
-        .eq('status', 'waiting')
-        .order('created_at', { ascending: false });
+      try {
+        const { data, error } = await supabase
+          .from('game_rooms')
+          .select('*')
+          .eq('status', 'waiting')
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error loading rooms:', error);
-      } else {
-        setRooms(data || []);
+        if (error) {
+          console.error('Error loading rooms:', error);
+        } else {
+          setRooms(data || []);
+        }
+      } catch (error) {
+        console.error('Supabase connection error:', error);
       }
     };
 
@@ -70,7 +101,7 @@ export default function GameRoomsPage() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [user]);
+  }, [user, supabaseReady]);
 
   // 6자리 룸 코드 생성
   const generateRoomCode = () => {
@@ -84,7 +115,7 @@ export default function GameRoomsPage() {
 
   // 게임 룸 생성
   const createRoom = async () => {
-    if (!user || !newRoomName.trim()) return;
+    if (!user || !newRoomName.trim() || !supabaseReady) return;
     
     setLoading(true);
     const roomCode = generateRoomCode();
@@ -132,7 +163,7 @@ export default function GameRoomsPage() {
 
   // 룸 코드로 참여
   const joinRoomByCode = async () => {
-    if (!user || !joinCode.trim()) return;
+    if (!user || !joinCode.trim() || !supabaseReady) return;
     
     setLoading(true);
     
@@ -199,6 +230,19 @@ export default function GameRoomsPage() {
     router.push(`/zero-g-combat/rooms/${room.id}`);
   };
 
+  // Supabase 연결 체크
+  if (!supabaseReady) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-red-400 font-mono text-center">
+          <h2 className="text-2xl mb-4">⚠️ Configuration Error</h2>
+          <p>Supabase connection is not properly configured.</p>
+          <p className="text-sm mt-2">Please check environment variables.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -217,6 +261,9 @@ export default function GameRoomsPage() {
           </h1>
           <p className="text-green-300">
             Join or create a multiplayer battle room
+          </p>
+          <p className="text-green-400/70 text-sm mt-2">
+            Welcome, {user.display_name} (@{user.username})
           </p>
         </div>
 
