@@ -410,7 +410,7 @@ export default function Home() {
                 </span>
               </div>
               <p className="text-gray-400 group-hover:text-gray-800 transition-colors mb-6 text-sm md:text-base">
-                > Physics-based space combat simulation
+                &gt; Physics-based space combat simulation
               </p>
               <div className="flex items-center justify-between">
                 <span className="retro-button text-xs md:text-sm px-4 md:px-6 py-2 md:py-3">
