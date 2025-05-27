@@ -22,47 +22,14 @@ export default function Terminal({
   const inputRef = useRef<HTMLInputElement>(null)
   const outputRef = useRef<HTMLDivElement>(null)
   const [showCursor, setShowCursor] = useState(true)
-  const [currentLine, setCurrentLine] = useState('')
-  const [completedLines, setCompletedLines] = useState<string[]>([])
-
-  // Split target text into lines for line-by-line processing
-  const targetLines = targetText.split('\n')
-  const currentTargetLine = completedLines.length < targetLines.length 
-    ? targetLines[completedLines.length] 
-    : ''
-
-  const {
-    userInput,
-    stats,
-    isActive: typingActive,
-    isComplete,
-    startTyping,
-    stopTyping,
-    resetTyping,
-    handleInput,
-    progress,
-    currentChar,
-    errors
-  } = useTyping({
-    targetText: currentTargetLine, // Process one line at a time
-    onComplete: (stats) => {
-      // Line completed
-      const newCompletedLines = [...completedLines, currentLine]
-      setCompletedLines(newCompletedLines)
-      setCurrentLine('')
-      
-      // Check if all lines are completed
-      if (newCompletedLines.length >= targetLines.length) {
-        onComplete?.(stats)
-      } else {
-        // Reset for next line
-        resetTyping()
-      }
-    },
-    onKeystroke,
-    onStatsUpdate: (stats) => {
-      // Real-time stats updates
-    }
+  const [userInput, setUserInput] = useState('')
+  const [missionComplete, setMissionComplete] = useState(false)
+  const [stats, setStats] = useState({
+    wpm: 0,
+    accuracy: 100,
+    errors: 0,
+    startTime: new Date(),
+    currentTime: new Date()
   })
 
   // Cursor blinking effect
@@ -78,42 +45,34 @@ export default function Terminal({
     if (inputRef.current && isActive) {
       inputRef.current.focus()
     }
-  }, [isActive])
+  }, [])
 
   // Auto-scroll to bottom when content changes
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight
     }
-  }, [completedLines, currentLine, errors])
+  }, [userInput])
 
   // Handle key press including Enter
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!typingActive && currentLine.length === 0) {
-      startTyping()
-    }
-    
-    // Handle Enter key for line completion
+    // Handle Enter key for mission completion
     if (e.key === 'Enter') {
       e.preventDefault()
       
-      // Check if current line matches target line
-      if (currentLine === currentTargetLine) {
-        // Line is correct, move to next line
-        const newCompletedLines = [...completedLines, currentLine]
-        setCompletedLines(newCompletedLines)
-        setCurrentLine('')
-        
-        // Check if all lines are completed
-        if (newCompletedLines.length >= targetLines.length) {
-          onComplete?.(stats)
-        } else {
-          // Reset for next line
-          resetTyping()
-        }
+      // Check if user input matches target text exactly
+      if (userInput.trim() === targetText.trim()) {
+        // Mission completed successfully
+        setMissionComplete(true)
+        onComplete?.({
+          wpm: stats.wpm,
+          accuracy: stats.accuracy,
+          errors: stats.errors,
+          completedAt: new Date()
+        })
       } else {
-        // Line is incorrect, show error but allow retry
-        console.log('Line incorrect, retry needed')
+        // Mission failed, show error
+        setStats(prev => ({ ...prev, errors: prev.errors + 1 }))
       }
     }
   }
@@ -121,11 +80,20 @@ export default function Terminal({
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
-    setCurrentLine(value)
-    handleInput(value)
+    setUserInput(value)
+    
+    // Calculate basic stats
+    const accuracy = targetText.length > 0 ? 
+      Math.round((value.split('').filter((char, index) => char === targetText[index]).length / Math.max(value.length, 1)) * 100) : 100
+    
+    setStats(prev => ({
+      ...prev,
+      accuracy,
+      currentTime: new Date()
+    }))
   }
 
-  // Prevent drag, copy, paste
+  // Prevent copy/paste
   const handleCopy = (e: React.ClipboardEvent) => {
     e.preventDefault()
   }
@@ -136,81 +104,48 @@ export default function Terminal({
 
   // Render target text with character-by-character highlighting
   const renderTargetText = () => {
-    return targetLines.map((line, lineIndex) => {
-      let lineClass = 'font-dunggeun mb-1'
+    return targetText.split('').map((char, index) => {
+      let className = 'font-dunggeun'
       
-      if (lineIndex < completedLines.length) {
-        // Completed lines
-        lineClass += ' text-green-400'
-      } else if (lineIndex === completedLines.length) {
-        // Current line being typed
-        lineClass += ' text-yellow-400'
-        
-        return (
-          <div key={lineIndex} className={lineClass}>
-            {line.split('').map((char, charIndex) => {
-              let className = ''
-              
-              if (charIndex < currentLine.length) {
-                // Already typed characters
-                if (currentLine[charIndex] === char) {
-                  className = 'text-green-400'
-                } else {
-                  className = 'text-red-400 bg-red-900'
-                }
-              } else if (charIndex === currentLine.length) {
-                // Current character to type
-                className = `text-yellow-400 ${showCursor ? 'bg-yellow-900' : ''}`
-              } else {
-                // Future characters
-                className = 'text-gray-400'
-              }
-
-              return (
-                <span key={charIndex} className={className}>
-                  {char}
-                </span>
-              )
-            })}
-          </div>
-        )
+      if (index < userInput.length) {
+        // Already typed characters
+        if (userInput[index] === char) {
+          className += ' text-green-400'
+        } else {
+          className += ' text-red-400 bg-red-900'
+        }
+      } else if (index === userInput.length) {
+        // Current character to type
+        className += ` text-yellow-400 ${showCursor ? 'bg-yellow-900' : ''}`
       } else {
-        // Future lines
-        lineClass += ' text-gray-500'
+        // Future characters
+        className += ' text-gray-400'
       }
 
       return (
-        <div key={lineIndex} className={lineClass}>
-          {line}
-        </div>
+        <span key={index} className={className}>
+          {char === '\n' ? (
+            <>
+              ↵
+              <br />
+            </>
+          ) : (
+            char
+          )}
+        </span>
       )
     })
   }
 
-  // Render current input line
-  const renderCurrentInput = () => {
-    return (
-      <div className="font-dunggeun text-green-400">
-        <span className="text-green-400">C:\HACK&gt; </span>
-        <span className="text-green-400">
-          {currentLine}
-          {showCursor && <span className="animate-pulse">_</span>}
-        </span>
-      </div>
-    )
-  }
-
-  // Calculate overall progress
-  const overallProgress = targetLines.length > 0 
-    ? ((completedLines.length + (currentLine.length / Math.max(currentTargetLine.length, 1))) / targetLines.length) * 100
-    : 0
+  // Calculate progress
+  const progress = targetText.length > 0 ? (userInput.length / targetText.length) * 100 : 0
 
   return (
     <div className={`dos-terminal ${className}`}>
-      {/* DOS Terminal Window */}
-      <div className="dos-window bg-black border-2 border-gray-600 shadow-2xl font-dunggeun">
+      {/* DOS Terminal Window - Larger Size */}
+      <div className="dos-window bg-black border-2 border-gray-600 shadow-2xl font-dunggeun resize overflow-auto">
         {/* Window Title Bar */}
-        <div className="dos-titlebar bg-gray-700 text-white px-2 py-1 text-xs flex justify-between items-center">
+        <div className="dos-titlebar bg-gray-700 text-white px-2 py-1 text-xs flex justify-between items-center cursor-move">
           <span>💀 HACKER TERMINAL - SYSTEM BREACH v3.14</span>
           <div className="flex space-x-1">
             <div className="w-3 h-3 bg-yellow-500 rounded-sm"></div>
@@ -223,16 +158,16 @@ export default function Terminal({
         <div 
           className="dos-content bg-black text-green-400 relative"
           onClick={() => inputRef.current?.focus()}
-          style={{ height: '500px', overflow: 'hidden' }}
+          style={{ height: '600px', overflow: 'hidden' }}
         >
           {/* Scrollable Output Area */}
           <div 
             ref={outputRef}
             className="dos-output absolute top-0 left-0 right-0 p-4 pr-6 overflow-y-auto font-dunggeun text-sm leading-6"
-            style={{ height: 'calc(100% - 60px)' }} // Leave space for input at bottom
+            style={{ height: 'calc(100% - 80px)' }}
           >
             {/* System Boot Messages */}
-            <div className="text-green-400 mb-2">
+            <div className="text-green-400 mb-4">
               <div>HACKNET TERMINAL SYSTEM v3.14.159</div>
               <div>Copyright (C) 2025 Underground Collective</div>
               <div className="text-gray-500">----------------------------------------</div>
@@ -241,7 +176,7 @@ export default function Terminal({
               <div>Target System: <span className="text-yellow-400">CLASSIFIED</span></div>
               <div className="text-gray-500">----------------------------------------</div>
               <div className="mb-4">
-                Initiating command sequence... Type each command exactly as shown, press ENTER to execute.
+                Initiating command sequence... Type the entire command sequence and press ENTER to execute.
               </div>
             </div>
 
@@ -251,7 +186,7 @@ export default function Terminal({
                 <div>WPM: <span className="text-yellow-400">{stats.wpm}</span></div>
                 <div>ACC: <span className="text-blue-400">{stats.accuracy}%</span></div>
                 <div>ERR: <span className="text-red-400">{stats.errors}</span></div>
-                <div>PROG: <span className="text-green-400">{Math.round(overallProgress)}%</span></div>
+                <div>PROG: <span className="text-green-400">{Math.round(progress)}%</span></div>
               </div>
             </div>
 
@@ -269,53 +204,36 @@ export default function Terminal({
               <div className="bg-gray-800 h-2 border border-gray-600">
                 <div 
                   className="bg-green-400 h-full transition-all duration-300"
-                  style={{ width: `${overallProgress}%` }}
+                  style={{ width: `${progress}%` }}
                 />
               </div>
             </div>
 
-            {/* Completed Commands Display */}
-            {completedLines.length > 0 && (
-              <div className="mb-4">
-                <div className="text-green-400 text-xs mb-1">EXECUTED COMMANDS:</div>
-                <div className="bg-green-900 bg-opacity-20 border border-green-600 p-2">
-                  {completedLines.map((line, index) => (
-                    <div key={index} className="text-green-300 text-xs">
-                      ✅ {line}
-                    </div>
-                  ))}
+            {/* User's Typed Commands Display */}
+            <div className="mb-4">
+              <div className="text-blue-400 text-xs mb-2">YOUR INPUT:</div>
+              <div className="bg-blue-900 bg-opacity-20 border border-blue-600 p-3 min-h-[100px]">
+                <div className="text-blue-300 whitespace-pre-wrap text-sm">
+                  {userInput || <span className="text-gray-500">Start typing...</span>}
+                  {showCursor && !missionComplete && <span className="text-blue-400 animate-pulse">_</span>}
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Error Messages */}
-            {errors.length > 0 && (
+            {/* Error Display */}
+            {stats.errors > 0 && (
               <div className="mb-4">
-                <div className="text-red-400 text-xs mb-1">EXECUTION ERRORS:</div>
+                <div className="text-red-400 text-xs mb-1">EXECUTION ERRORS: {stats.errors}</div>
                 <div className="bg-red-900 bg-opacity-30 border border-red-600 p-2">
-                  {errors.slice(-3).map((error, index) => (
-                    <div key={index} className="text-red-300 text-xs">
-                      ⚠️ {error}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Current Line Status */}
-            {currentTargetLine && !isComplete && (
-              <div className="mb-4">
-                <div className="text-yellow-400 text-xs">
-                  CURRENT COMMAND: <span className="text-white font-bold ml-2">{currentTargetLine}</span>
-                </div>
-                <div className="text-gray-400 text-xs mt-1">
-                  Progress: {currentLine.length}/{currentTargetLine.length} characters | Press ENTER when complete
+                  <div className="text-red-300 text-xs">
+                    ⚠️ Command sequence does not match required input. Please try again.
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Completion Message */}
-            {completedLines.length >= targetLines.length && (
+            {missionComplete && (
               <div className="mb-4">
                 <div className="text-green-400 border border-green-400 p-3">
                   <div className="text-center">
@@ -331,87 +249,92 @@ export default function Terminal({
               </div>
             )}
 
+            {/* Instructions */}
+            {!missionComplete && (
+              <div className="mb-4">
+                <div className="text-yellow-400 text-xs">
+                  INSTRUCTIONS: Type the entire command sequence above, then press ENTER to execute.
+                </div>
+                <div className="text-gray-400 text-xs mt-1">
+                  Match exactly including spaces and line breaks. Copy/Paste disabled.
+                </div>
+              </div>
+            )}
+
             {/* Spacer for scrolling */}
             <div style={{ height: '20px' }}></div>
           </div>
 
           {/* Fixed Input Line at Bottom */}
           <div className="dos-input absolute bottom-0 left-0 right-0 bg-black border-t border-gray-700 p-4">
-            {completedLines.length < targetLines.length ? (
-              <div className="relative">
-                {renderCurrentInput()}
-                {/* Hidden input field for actual typing */}
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={currentLine}
-                  onChange={handleInputChange}
-                  onKeyDown={handleKeyDown}
-                  onCopy={handleCopy}
-                  onPaste={handlePaste}
-                  className="absolute top-0 left-0 w-full h-full opacity-0 bg-transparent border-none outline-none font-dunggeun"
-                  disabled={!isActive}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </div>
-            ) : (
-              <div className="font-dunggeun text-green-400">
-                <span className="text-green-400">C:\HACK&gt; </span>
-                <span className="text-gray-400">System breached successfully. Awaiting new commands...</span>
-                <span className="text-green-400 animate-pulse">_</span>
-              </div>
-            )}
+            <div className="font-dunggeun text-green-400 flex items-center">
+              <span className="text-green-400 mr-2">C:\HACK&gt;</span>
+              <input
+                ref={inputRef}
+                type="text"
+                value={userInput}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                onCopy={handleCopy}
+                onPaste={handlePaste}
+                className="flex-1 bg-transparent border-none outline-none text-green-400 font-dunggeun text-sm"
+                disabled={!isActive || missionComplete}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={missionComplete ? "Mission Complete" : "Type command sequence here..."}
+              />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Control Buttons Below Terminal */}
       <div className="flex justify-center space-x-4 mt-4">
-        {!typingActive && currentLine.length === 0 && completedLines.length === 0 && (
-          <button 
-            onClick={startTyping}
-            className="retro-button border-green-400 text-green-400 hover:bg-green-400 hover:text-black px-6 py-2 font-bold"
-          >
-            INITIATE HACK
-          </button>
-        )}
-        
-        {(typingActive || currentLine.length > 0) && completedLines.length < targetLines.length && (
-          <button 
-            onClick={() => {
-              stopTyping()
-              setCurrentLine('')
-              setCompletedLines([])
-              resetTyping()
-            }}
-            className="retro-button border-red-400 text-red-400 hover:bg-red-400 hover:text-black px-6 py-2 font-bold"
-          >
-            ABORT MISSION
-          </button>
-        )}
-        
         <button 
           onClick={() => {
-            stopTyping()
-            setCurrentLine('')
-            setCompletedLines([])
-            resetTyping()
+            setUserInput('')
+            setMissionComplete(false)
+            setStats({
+              wpm: 0,
+              accuracy: 100,
+              errors: 0,
+              startTime: new Date(),
+              currentTime: new Date()
+            })
+            inputRef.current?.focus()
           }}
           className="retro-button border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black px-6 py-2 font-bold"
         >
           RESET SYSTEM
         </button>
+        
+        {!missionComplete && (
+          <button 
+            onClick={() => {
+              if (userInput.trim() === targetText.trim()) {
+                setMissionComplete(true)
+                onComplete?.({
+                  wpm: stats.wpm,
+                  accuracy: stats.accuracy,
+                  errors: stats.errors,
+                  completedAt: new Date()
+                })
+              } else {
+                setStats(prev => ({ ...prev, errors: prev.errors + 1 }))
+              }
+            }}
+            className="retro-button border-green-400 text-green-400 hover:bg-green-400 hover:text-black px-6 py-2 font-bold"
+          >
+            EXECUTE COMMAND
+          </button>
+        )}
       </div>
 
       {/* Instructions */}
-      {!typingActive && currentLine.length === 0 && completedLines.length === 0 && (
-        <div className="text-center text-gray-400 text-sm mt-4 font-dunggeun">
-          <div>Click the terminal and start typing to begin the hack...</div>
-          <div className="text-xs mt-1">Type each command line by line | Press ENTER to execute each command</div>
-          <div className="text-xs mt-1 text-red-400">⚠️ Copy/Paste disabled for security</div>
-        </div>
-      )}
+      <div className="text-center text-gray-400 text-sm mt-4 font-dunggeun">
+        <div>Type the entire command sequence in the terminal, then press ENTER or click EXECUTE</div>
+        <div className="text-xs mt-1">Window is resizable and draggable | Copy/Paste disabled for security</div>
+      </div>
 
       {/* CSS Styles */}
       <style jsx>{`
@@ -420,10 +343,14 @@ export default function Terminal({
         }
         
         .dos-window {
-          max-width: 800px;
+          width: 900px;
+          min-width: 600px;
+          max-width: 1200px;
           margin: 0 auto;
           border-radius: 0;
           box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+          resize: both;
+          overflow: auto;
         }
         
         .dos-titlebar {
@@ -457,7 +384,12 @@ export default function Terminal({
         }
         
         .dos-input {
-          min-height: 50px;
+          min-height: 60px;
+        }
+        
+        .dos-input input::placeholder {
+          color: #666;
+          opacity: 0.7;
         }
         
         /* Matrix-style text shadow */
