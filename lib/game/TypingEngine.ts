@@ -40,6 +40,16 @@ export class TypingEngine {
     this.errors = 0
   }
 
+  // 문자 비교 함수 - 띄어쓰기 처리 개선
+  private compareChars(actual: string, expected: string): boolean {
+    // 일반 스페이스와 Non-breaking space를 동일하게 처리
+    if ((actual === ' ' || actual === '\u00A0') && (expected === ' ' || expected === '\u00A0')) {
+      return true
+    }
+    // 대소문자 구분하여 정확히 비교
+    return actual === expected
+  }
+
   // Validate user input against target text
   validateInput(userInput: string): ValidationResult {
     const result: ValidationResult = {
@@ -49,17 +59,18 @@ export class TypingEngine {
       errors: []
     }
 
-    // Check each character
+    // Check each character with improved logic
     for (let i = 0; i < userInput.length; i++) {
       const expectedChar = this.targetText[i]
       const actualChar = userInput[i]
       
-      if (expectedChar === actualChar) {
+      if (this.compareChars(actualChar, expectedChar)) {
         result.completedChars++
       } else {
         result.isCorrect = false
-        result.errors.push(`Position ${i}: expected '${expectedChar}', got '${actualChar}'`)
-        this.errors++
+        const expectedDisplay = expectedChar === ' ' ? '[SPACE]' : expectedChar
+        const actualDisplay = actualChar === ' ' ? '[SPACE]' : actualChar
+        result.errors.push(`Position ${i + 1}: expected '${expectedDisplay}', got '${actualDisplay}'`)
       }
     }
 
@@ -72,7 +83,7 @@ export class TypingEngine {
     const keystroke: KeystrokeEvent = {
       key,
       timestamp: Date.now(),
-      isCorrect: key === expectedChar,
+      isCorrect: this.compareChars(key, expectedChar), // 개선된 비교 함수 사용
       expectedChar,
       actualChar: key
     }
@@ -110,7 +121,7 @@ export class TypingEngine {
       accuracy,
       correctChars: validation.completedChars,
       totalChars: userInput.length,
-      errors: this.errors,
+      errors: validation.errors.length, // 실제 에러 개수 반영
       startTime: this.startTime || currentTime,
       currentTime
     }
@@ -118,8 +129,10 @@ export class TypingEngine {
 
   // Check if typing is complete
   isComplete(userInput: string): boolean {
-    return userInput.length >= this.targetText.length && 
-           this.validateInput(userInput).completedChars === this.targetText.length
+    if (userInput.length < this.targetText.length) return false
+    
+    const validation = this.validateInput(userInput)
+    return validation.completedChars === this.targetText.length
   }
 
   // Get completion percentage
@@ -161,6 +174,32 @@ export class TypingEngine {
       correctKeystrokes,
       errorRate: Math.round(errorRate),
       averageSpeed: Math.round(averageSpeed)
+    }
+  }
+
+  // 디버깅용 함수 추가
+  public debugCurrentState(userInput: string): {
+    targetLength: number
+    inputLength: number
+    currentPosition: number
+    nextExpectedChar: string
+    lastInputChar: string
+    isMatching: boolean
+  } {
+    const nextExpectedChar = userInput.length < this.targetText.length 
+      ? this.targetText[userInput.length] 
+      : ''
+    const lastInputChar = userInput.length > 0 
+      ? userInput[userInput.length - 1] 
+      : ''
+    
+    return {
+      targetLength: this.targetText.length,
+      inputLength: userInput.length,
+      currentPosition: this.currentPosition,
+      nextExpectedChar: nextExpectedChar === ' ' ? '[SPACE]' : nextExpectedChar,
+      lastInputChar: lastInputChar === ' ' ? '[SPACE]' : lastInputChar,
+      isMatching: userInput.length > 0 ? this.compareChars(lastInputChar, this.targetText[userInput.length - 1]) : true
     }
   }
 }

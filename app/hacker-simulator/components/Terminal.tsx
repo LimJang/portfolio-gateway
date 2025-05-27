@@ -90,10 +90,10 @@ export default function Terminal({
 
   
 
-  // Render text with highlighting
+  // Render text with highlighting - 띄어쓰기 처리 수정
   const renderText = () => {
     return targetText.split('').map((char, index) => {
-      let className = 'font-mono'
+      let className = 'font-dunggeun' // font-mono 대신 일관된 폰트 사용
       
       if (index < userInput.length) {
         // Already typed characters
@@ -112,7 +112,7 @@ export default function Terminal({
 
       return (
         <span key={index} className={className}>
-          {char === ' ' ? '\u00A0' : char}
+          {char === ' ' ? '·' : char}
         </span>
       )
     })
@@ -129,7 +129,7 @@ export default function Terminal({
         onKeyDown={handleKeyPress}
         onCopy={handleCopy}
         onPaste={handlePaste}
-        className="absolute opacity-0 pointer-events-none font-mono"
+        className="absolute opacity-0 pointer-events-none font-dunggeun" // 폰트 일관성
         disabled={!isActive || isComplete}
         autoComplete="off"
         spellCheck={false}
@@ -137,7 +137,7 @@ export default function Terminal({
 
       {/* Terminal Display */}
       <div 
-        className="terminal-display bg-black border-2 border-green-400 p-4 rounded font-mono cursor-text select-none"
+        className="terminal-display bg-black border-2 border-green-400 p-4 rounded font-dunggeun cursor-text select-none" // 폰트 일관성
         onClick={() => inputRef.current?.focus()}
         onMouseDown={handleMouseDown}
         onContextMenu={handleContextMenu}
@@ -147,7 +147,7 @@ export default function Terminal({
           MozUserSelect: 'none' }}
       >
         {/* Stats Header */}
-        <div className="flex justify-between items-center mb-4 text-sm border-b border-green-400 pb-2 font-mono">
+        <div className="flex justify-between items-center mb-4 text-sm border-b border-green-400 pb-2 font-dunggeun">
           <div className="flex space-x-4">
             <span className="text-green-400 font-bold">
               WPM: <span className="font-bold text-yellow-400">{stats.wpm}</span>
@@ -179,11 +179,11 @@ export default function Terminal({
         </div>
 
         {/* Main Text Display */}
-        <div className="text-lg leading-relaxed mb-4 p-4 bg-gray-900 bg-opacity-50 rounded border border-gray-700 min-h-[200px] font-mono select-none">
+        <div className="text-lg leading-relaxed mb-4 p-4 bg-gray-900 bg-opacity-50 rounded border border-gray-700 min-h-[200px] font-dunggeun select-none">
           <div className="whitespace-pre-wrap select-none">
             {renderText()}
             {showCursor && userInput.length === targetText.length && (
-              <span className="text-green-400 animate-pulse font-mono">█</span>
+              <span className="text-green-400 animate-pulse font-dunggeun">█</span>
             )}
           </div>
         </div>
@@ -191,8 +191,8 @@ export default function Terminal({
         {/* Current Character Display */}
         {currentChar && !isComplete && (
           <div className="mb-4 p-2 bg-yellow-900 bg-opacity-30 border border-yellow-400 rounded">
-            <span className="text-yellow-400 text-sm font-bold">
-              NEXT: <span className="text-2xl font-bold ml-2 font-mono">{currentChar === ' ' ? '[SPACE]' : currentChar}</span>
+            <span className="text-yellow-400 text-sm font-bold font-dunggeun">
+              NEXT: <span className="text-2xl font-bold ml-2 font-dunggeun">{currentChar === ' ' ? '[SPACE]' : currentChar}</span>
             </span>
           </div>
         )}
@@ -200,8 +200,8 @@ export default function Terminal({
         {/* Error Display */}
         {errors.length > 0 && (
           <div className="mb-4 p-2 bg-red-900 bg-opacity-30 border border-red-400 rounded">
-            <div className="text-red-400 text-sm mb-1 font-bold">ERRORS DETECTED:</div>
-            <div className="text-xs text-red-300 max-h-20 overflow-y-auto font-mono">
+            <div className="text-red-400 text-sm mb-1 font-bold font-dunggeun">ERRORS DETECTED:</div>
+            <div className="text-xs text-red-300 max-h-20 overflow-y-auto font-dunggeun">
               {errors.slice(-3).map((error, index) => (
                 <div key={index} className="font-bold">&gt; {error}</div>
               ))}
@@ -212,7 +212,7 @@ export default function Terminal({
         {/* Completion Message */}
         {isComplete && (
           <div className="p-4 bg-green-900 bg-opacity-50 border border-green-400 rounded">
-            <div className="text-green-400 text-center">
+            <div className="text-green-400 text-center font-dunggeun">
               <div className="text-xl font-bold mb-2">🎉 COMMAND SEQUENCE COMPLETE! 🎉</div>
               <div className="text-sm font-bold">
                 Final Stats: {stats.wpm} WPM | {stats.accuracy}% Accuracy | {stats.correctChars}/{stats.totalChars} Characters
@@ -223,7 +223,7 @@ export default function Terminal({
 
         {/* Instructions */}
         {!typingActive && userInput.length === 0 && (
-          <div className="text-center text-gray-400 text-sm mt-4 font-bold">
+          <div className="text-center text-gray-400 text-sm mt-4 font-bold font-dunggeun">
             <div>Click here and start typing to begin...</div>
             <div className="text-xs mt-1">Type each character exactly as shown above</div>
             <div className="text-xs mt-1 text-red-400">⚠️ Copy/Paste disabled for fair play</div>
