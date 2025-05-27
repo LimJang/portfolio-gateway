@@ -24,6 +24,7 @@ export default function Terminal({
   const [showCursor, setShowCursor] = useState(true)
   const [userInput, setUserInput] = useState('')
   const [missionComplete, setMissionComplete] = useState(false)
+  const [startTime] = useState(new Date())
   const [stats, setStats] = useState({
     wpm: 0,
     accuracy: 100,
@@ -60,30 +61,45 @@ export default function Terminal({
   // Check completion when user input changes
   useEffect(() => {
     if (userInput.length > 0 && cleanTargetText.length > 0) {
-      const progress = (userInput.length / cleanTargetText.length) * 100
+      // Calculate progress with 100% limit
+      const rawProgress = (userInput.length / cleanTargetText.length) * 100
+      const progress = Math.min(100, rawProgress) // 100% 리밋
       
       // Calculate accuracy
       const correctChars = userInput.split('').filter((char, index) => char === cleanTargetText[index]).length
       const accuracy = Math.round((correctChars / userInput.length) * 100)
       
+      // Calculate WPM
+      const currentTime = new Date()
+      const timeElapsed = (currentTime.getTime() - startTime.getTime()) / 1000 / 60 // minutes
+      const wpm = timeElapsed > 0 ? Math.round((correctChars / 5) / timeElapsed) : 0
+      
       setStats(prev => ({
         ...prev,
+        wpm,
         accuracy,
-        currentTime: new Date()
+        currentTime
       }))
 
-      // Auto-complete when progress reaches 100%
-      if (progress >= 100 && userInput === cleanTargetText) {
+      // Auto-complete when progress reaches exactly 100% and text matches
+      if (progress >= 100 && userInput === cleanTargetText && !missionComplete) {
         setMissionComplete(true)
-        onComplete?.({
-          wpm: stats.wpm,
+        
+        // Safe stats object for onComplete
+        const completionStats = {
+          wpm: wpm,
           accuracy: accuracy,
+          correctChars: correctChars,
+          totalChars: userInput.length,
           errors: stats.errors,
-          completedAt: new Date()
-        })
+          startTime: startTime,
+          currentTime: currentTime
+        }
+        
+        onComplete?.(completionStats)
       }
     }
-  }, [userInput, cleanTargetText, stats.wpm, stats.errors, onComplete])
+  }, [userInput, cleanTargetText, startTime, stats.errors, missionComplete, onComplete])
 
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,8 +144,9 @@ export default function Terminal({
     })
   }
 
-  // Calculate progress
-  const progress = cleanTargetText.length > 0 ? (userInput.length / cleanTargetText.length) * 100 : 0
+  // Calculate progress with 100% limit
+  const rawProgress = cleanTargetText.length > 0 ? (userInput.length / cleanTargetText.length) * 100 : 0
+  const progress = Math.min(100, rawProgress)
 
   return (
     <div className={`dos-terminal ${className}`}>
@@ -233,28 +250,26 @@ export default function Terminal({
             <div style={{ height: '20px' }}></div>
           </div>
 
-          {/* Fixed Input Area at Bottom - SINGLE INPUT ONLY */}
+          {/* Fixed C:\HACK> Input at Bottom */}
           <div className="dos-input absolute bottom-0 left-0 right-0 bg-black border-t border-gray-700 p-4">
-            <div className="mb-2">
-              <div className="text-blue-400 text-xs mb-1">YOUR INPUT:</div>
-              <div className="bg-blue-900 bg-opacity-20 border border-blue-600 p-3 min-h-[60px]">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={userInput}
-                  onChange={handleInputChange}
-                  onCopy={handleCopy}
-                  onPaste={handlePaste}
-                  className="w-full bg-transparent border-none outline-none text-blue-300 font-dunggeun text-sm"
-                  disabled={!isActive || missionComplete}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder={missionComplete ? "Mission Complete" : "Start typing the command sequence..."}
-                />
-                {showCursor && !missionComplete && userInput.length === 0 && (
-                  <span className="text-blue-400 animate-pulse">_</span>
-                )}
-              </div>
+            <div className="font-dunggeun text-green-400 flex items-center">
+              <span className="text-green-400 mr-2">C:\HACK&gt;</span>
+              <input
+                ref={inputRef}
+                type="text"
+                value={userInput}
+                onChange={handleInputChange}
+                onCopy={handleCopy}
+                onPaste={handlePaste}
+                className="flex-1 bg-transparent border-none outline-none text-green-400 font-dunggeun text-sm"
+                disabled={!isActive || missionComplete}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={missionComplete ? "Mission Complete" : "Type command sequence here..."}
+              />
+              {showCursor && !missionComplete && userInput.length === 0 && (
+                <span className="text-green-400 animate-pulse">_</span>
+              )}
             </div>
           </div>
         </div>
@@ -335,7 +350,7 @@ export default function Terminal({
         }
         
         .dos-input {
-          min-height: 100px;
+          min-height: 60px;
         }
         
         .dos-input input::placeholder {
