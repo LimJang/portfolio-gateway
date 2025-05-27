@@ -40,6 +40,15 @@ export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
       }
     };
 
+    // Prevent default space bar behavior
+    const preventSpaceScroll = (e: KeyboardEvent) => {
+      if (e.key === ' ' && e.target === canvasRef.current) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('keydown', preventSpaceScroll);
+    
     initializeGame();
 
     // Game loop
@@ -69,6 +78,7 @@ export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
     // Cleanup
     return () => {
       clearInterval(intervalId);
+      document.removeEventListener('keydown', preventSpaceScroll);
       if (engineRef.current) {
         engineRef.current.destroy();
       }
@@ -87,7 +97,7 @@ export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
   return (
     <div className="relative">
       {/* Game Canvas */}
-      <div className="border-2 border-green-400 rounded-lg overflow-hidden">
+      <div className="border-2 border-cyan-400 rounded-lg overflow-hidden shadow-lg shadow-cyan-400/20">
         <canvas
           ref={canvasRef}
           width={800}
@@ -118,7 +128,7 @@ export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
           <div className="space-y-1">
             <div>POS: ({Math.round(stats.position.x)}, {Math.round(stats.position.y)})</div>
             <div>VEL: ({Math.round(stats.velocity.x * 10) / 10}, {Math.round(stats.velocity.y * 10) / 10})</div>
-            <div>DIR: {Math.round(stats.direction)}°</div>
+            <div>ROT: {Math.round(stats.direction)}°</div>
           </div>
         </div>
       )}
@@ -127,7 +137,7 @@ export default function GameCanvas({ onGameEnd }: GameCanvasProps) {
       {gameStatus === 'playing' && (
         <div className="absolute top-4 right-4 bg-black/80 border border-green-400 rounded p-3 text-xs">
           <div className="space-y-1">
-            <div>WASD: Direction</div>
+            <div>A/D: Rotate</div>
             <div>SPACE: Thrust</div>
             <div>Stay inside boundaries!</div>
           </div>

@@ -94,22 +94,22 @@ export default class PhysicsEngine {
       // Top wall
       this.Matter.Bodies.rectangle(400, -thickness/2, 800, thickness, { 
         isStatic: true,
-        render: { fillStyle: '#ff0000' }
+        render: { fillStyle: '#00ffff' }
       }),
       // Bottom wall  
       this.Matter.Bodies.rectangle(400, 600 + thickness/2, 800, thickness, { 
         isStatic: true,
-        render: { fillStyle: '#ff0000' }
+        render: { fillStyle: '#00ffff' }
       }),
       // Left wall
       this.Matter.Bodies.rectangle(-thickness/2, 300, thickness, 600, { 
         isStatic: true,
-        render: { fillStyle: '#ff0000' }
+        render: { fillStyle: '#00ffff' }
       }),
       // Right wall
       this.Matter.Bodies.rectangle(800 + thickness/2, 300, thickness, 600, { 
         isStatic: true,
-        render: { fillStyle: '#ff0000' }
+        render: { fillStyle: '#00ffff' }
       })
     ];
 
@@ -140,10 +140,17 @@ export default class PhysicsEngine {
     // Keyboard event listeners
     const handleKeyDown = (event: KeyboardEvent) => {
       this.keys[event.key.toLowerCase()] = true;
+      // Prevent space bar from scrolling the page
+      if (event.key === ' ') {
+        event.preventDefault();
+      }
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
       this.keys[event.key.toLowerCase()] = false;
+      if (event.key === ' ') {
+        event.preventDefault();
+      }
     };
 
     this.canvas.addEventListener('keydown', handleKeyDown);
@@ -163,12 +170,12 @@ export default class PhysicsEngine {
       for (let pair of pairs) {
         const { bodyA, bodyB } = pair;
         
-        // Check if player hit boundary (red walls)
+        // Check if player hit boundary (cyan walls)
         if (this.player && (bodyA === this.player.body || bodyB === this.player.body)) {
           const otherBody = bodyA === this.player.body ? bodyB : bodyA;
           
-          // Check if hit boundary wall (they have red color)
-          if (otherBody.render.fillStyle === '#ff0000') {
+          // Check if hit boundary wall (they have cyan color)
+          if (otherBody.render.fillStyle === '#00ffff') {
             this.player.isAlive = false;
           }
         }
@@ -199,26 +206,26 @@ export default class PhysicsEngine {
   private handlePlayerInput() {
     if (!this.player || !this.Matter) return;
 
+    const rotationSpeed = 3; // degrees per frame
     const thrustForce = 0.001;
-    let thrust = { x: 0, y: 0 };
     
-    // Update direction based on WASD
-    if (this.keys['w']) this.player.direction = 270; // Up
-    if (this.keys['s']) this.player.direction = 90;  // Down  
-    if (this.keys['a']) this.player.direction = 180; // Left
-    if (this.keys['d']) this.player.direction = 0;   // Right
-    
-    // Diagonal directions
-    if (this.keys['w'] && this.keys['a']) this.player.direction = 225; // Up-Left
-    if (this.keys['w'] && this.keys['d']) this.player.direction = 315; // Up-Right
-    if (this.keys['s'] && this.keys['a']) this.player.direction = 135; // Down-Left
-    if (this.keys['s'] && this.keys['d']) this.player.direction = 45;  // Down-Right
+    // A/D keys for rotation
+    if (this.keys['a']) {
+      this.player.direction -= rotationSpeed;
+      if (this.player.direction < 0) this.player.direction += 360;
+    }
+    if (this.keys['d']) {
+      this.player.direction += rotationSpeed;
+      if (this.player.direction >= 360) this.player.direction -= 360;
+    }
 
-    // Apply thrust with SPACE
+    // SPACE for thrust in current direction
     if (this.keys[' ']) {
       const radians = (this.player.direction * Math.PI) / 180;
-      thrust.x = Math.cos(radians) * thrustForce;
-      thrust.y = Math.sin(radians) * thrustForce;
+      const thrust = {
+        x: Math.cos(radians) * thrustForce,
+        y: Math.sin(radians) * thrustForce
+      };
       
       this.Matter.Body.applyForce(this.player.body, this.player.body.position, thrust);
       this.player.isThrusting = true;

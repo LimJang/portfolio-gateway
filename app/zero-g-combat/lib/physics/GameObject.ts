@@ -52,7 +52,14 @@ export class Spaceship extends GameObject {
   public async createMatterBody(Matter: any): Promise<any> {
     if (!Matter) return this.body;
 
-    this.body = Matter.Bodies.circle(this.body.position.x, this.body.position.y, 12, {
+    // Create triangle shape for directional visibility
+    const vertices = [
+      { x: 0, y: -15 },    // Front point
+      { x: -8, y: 10 },    // Back left
+      { x: 8, y: 10 }      // Back right
+    ];
+
+    this.body = Matter.Bodies.fromVertices(this.body.position.x, this.body.position.y, [vertices], {
       density: 0.001,
       frictionAir: 0.001, // Very minimal air resistance
       restitution: 0.8,   // Bouncy
@@ -67,7 +74,11 @@ export class Spaceship extends GameObject {
   }
 
   public update() {
-    if (!this.body || !this.body.render) return;
+    if (!this.body || !this.body.render || !this.Matter) return;
+    
+    // Rotate the body to match the direction
+    const targetAngle = (this.direction * Math.PI) / 180;
+    this.Matter.Body.setAngle(this.body, targetAngle);
     
     // Update visual representation based on thrust
     if (this.isThrusting) {

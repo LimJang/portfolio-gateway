@@ -7,7 +7,7 @@ export default function ZeroGCombatPage() {
   const [gameStarted, setGameStarted] = useState(false);
 
   return (
-    <div className="min-h-screen bg-black text-green-400 font-mono">
+    <div className="min-h-screen bg-gray-900 text-green-400 font-mono">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
@@ -54,8 +54,8 @@ export default function ZeroGCombatPage() {
               <div className="mt-8 p-4 border border-green-400/30 rounded bg-green-400/5">
                 <h3 className="text-lg mb-2">CONTROLS:</h3>
                 <div className="text-sm space-y-1">
-                  <p>• WASD: Set ship direction</p>
-                  <p>• SPACE: Thrust in current direction</p>
+                  <p>• A/D: Rotate ship left/right</p>
+                  <p>• SPACE: Thrust forward</p>
                   <p>• Goal: Push enemies into boundary walls</p>
                 </div>
               </div>
