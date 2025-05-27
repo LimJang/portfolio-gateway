@@ -25,7 +25,7 @@ export default function JumkoeTalkiePage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [connectedUsers, setConnectedUsers] = useState<VoiceUser[]>([])
-  const [isPTTActive, setIsPTTActive] = useState(false)
+  const [isMicOn, setIsMicOn] = useState(false) // 홀드 대신 토글 방식
   const [isLoading, setIsLoading] = useState(true)
   const [micPermission, setMicPermission] = useState<'granted' | 'denied' | 'prompt'>('prompt')
   const [audioLevel, setAudioLevel] = useState(0)
@@ -242,7 +242,7 @@ export default function JumkoeTalkiePage() {
   }, [])
 
   const updateAudioLevel = useCallback(() => {
-    if (isPTTActive && analyserRef.current) {
+    if (isMicOn && analyserRef.current) {
       const level = getAudioLevel()
       setAudioLevel(level)
       
@@ -260,18 +260,19 @@ export default function JumkoeTalkiePage() {
       setAudioLevel(0)
     }
 
-    if (isPTTActive) {
+    if (isMicOn) {
       animationFrameRef.current = requestAnimationFrame(updateAudioLevel)
     }
-  }, [isPTTActive, authUser, getAudioLevel])
+  }, [isMicOn, authUser, getAudioLevel])
 
-  const handlePTTStart = async () => {
+  // 마이크 토글 함수 (디스코드 스타일)
+  const toggleMicrophone = async () => {
     if (micPermission !== 'granted') {
       await requestMicPermission()
       return
     }
 
-    // WebRTC 음성 통신 시작 (첫 번째 PTT 클릭 시)
+    // WebRTC 음성 통신 시작 (처음 켤 때)
     if (!isVoiceEnabled) {
       try {
         const stream = await startVoice()
@@ -302,54 +303,48 @@ export default function JumkoeTalkiePage() {
       }
     }
 
-    setIsPTTActive(true)
-    updateAudioLevel()
-  }
+    const newMicState = !isMicOn
+    setIsMicOn(newMicState)
 
-  const handlePTTEnd = () => {
-    setIsPTTActive(false)
-    setAudioLevel(0)
-    
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)
-    }
+    if (newMicState) {
+      // 마이크 켜기
+      updateAudioLevel()
+    } else {
+      // 마이크 끄기
+      setAudioLevel(0)
+      
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
 
-    // Supabase presence 업데이트 (speaking 중지)
-    if (channelRef.current && authUser) {
-      channelRef.current.track({
-        user_id: authUser.id,
-        username: authUser.username,
-        display_name: authUser.displayName,
-        is_speaking: false,
-        last_activity: new Date().toISOString()
-      })
-    }
-  }
-
-  // 스페이스바 PTT
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !isPTTActive && micPermission === 'granted') {
-        e.preventDefault()
-        handlePTTStart()
+      // Supabase presence 업데이트 (speaking 중지)
+      if (channelRef.current && authUser) {
+        channelRef.current.track({
+          user_id: authUser.id,
+          username: authUser.username,
+          display_name: authUser.displayName,
+          is_speaking: false,
+          last_activity: new Date().toISOString()
+        })
       }
     }
+  }
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && isPTTActive) {
+  // 스페이스바 단축키 (토글 방식)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && micPermission === 'granted') {
         e.preventDefault()
-        handlePTTEnd()
+        toggleMicrophone()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [isPTTActive, micPermission])
+  }, [micPermission])
 
   const handleLogout = () => {
     // 오디오 스트림 정리
@@ -370,10 +365,10 @@ export default function JumkoeTalkiePage() {
   // 인증 로딩 중
   if (!authUser) {
     return (
-      <div className="min-h-screen bg-black text-green-400 flex items-center justify-center p-4 crt-effect">
+      <div className="min-h-screen bg-black text-green-400 flex items-center justify-center p-4 crt-effect font-mono">
         <div className="retro-border p-6 md:p-8 w-full max-w-sm md:max-w-md relative">
           <div className="scanline"></div>
-          <h1 className="text-xl md:text-2xl mb-6 text-center retro-glow typewriter">
+          <h1 className="text-xl md:text-2xl mb-6 text-center retro-glow typewriter font-bold">
             AUTHENTICATING...
           </h1>
           <div className="text-center">
@@ -389,23 +384,23 @@ export default function JumkoeTalkiePage() {
   }
 
   return (
-    <div className="h-screen bg-black text-green-400 flex flex-col crt-effect overflow-hidden">
+    <div className="h-screen bg-black text-green-400 flex flex-col crt-effect overflow-hidden font-mono">
       {/* Header */}
       <header className="border-b-2 border-green-400 p-3 md:p-4 retro-flicker flex-shrink-0">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
-          <h1 className="text-lg sm:text-xl retro-glow">
+          <h1 className="text-lg sm:text-xl retro-glow font-bold">
             JUMKOE-TALKIE.EXE
           </h1>
           
           <div className="flex items-center space-x-2 md:space-x-4 flex-wrap">
             <div className="flex items-center space-x-2">
-              <span className="text-xs md:text-sm">CONNECTED:</span>
-              <span className="text-yellow-400">{connectedUsers.length}</span>
+              <span className="text-xs md:text-sm font-bold">CONNECTED:</span>
+              <span className="text-yellow-400 font-bold">{connectedUsers.length}</span>
             </div>
             
             <div className="flex items-center space-x-2">
-              <span className="text-xs md:text-sm">P2P:</span>
-              <span className="text-blue-400">{connectedPeers.length}</span>
+              <span className="text-xs md:text-sm font-bold">P2P:</span>
+              <span className="text-blue-400 font-bold">{connectedPeers.length}</span>
             </div>
             
             <div className="flex items-center space-x-2">
@@ -413,14 +408,14 @@ export default function JumkoeTalkiePage() {
                 isVoiceEnabled ? 'bg-blue-400' : 
                 isConnected ? 'bg-green-400' : 'bg-red-400'
               }`}></div>
-              <span className="text-xs md:text-sm">{
+              <span className="text-xs md:text-sm font-bold">{
                 isVoiceEnabled ? 'VOICE_ACTIVE' : 
                 isConnected ? 'VOICE_READY' : 'CONNECTING'
               }</span>
             </div>
 
             <div className="flex items-center space-x-2">
-              <span className="text-xs md:text-sm">AUDIO:</span>
+              <span className="text-xs md:text-sm font-bold">AUDIO:</span>
               <div className="flex space-x-1">
                 {[...Array(5)].map((_, i) => (
                   <div 
@@ -434,18 +429,18 @@ export default function JumkoeTalkiePage() {
             </div>
 
             {isAdmin(authUser) && (
-              <Link href="/admin" className="retro-button text-xs py-1 px-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black">
+              <Link href="/admin" className="retro-button text-xs py-1 px-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black font-bold">
                 🔑 ADMIN_TOOLS
               </Link>
             )}
             
-            <Link href="/" className="retro-button text-xs py-1 px-3">
+            <Link href="/" className="retro-button text-xs py-1 px-3 font-bold">
               HOME
             </Link>
             
             <button 
               onClick={handleLogout}
-              className="retro-button text-xs py-1 px-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black"
+              className="retro-button text-xs py-1 px-3 border-red-400 text-red-400 hover:bg-red-400 hover:text-black font-bold"
             >
               LOGOUT
             </button>
@@ -457,13 +452,13 @@ export default function JumkoeTalkiePage() {
       <div className="border-b border-gray-700 p-2 md:p-3 bg-gray-900 bg-opacity-50 flex-shrink-0">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <span className="text-xs md:text-sm">
-            &gt; Voice User: <span className="text-orange-400">{authUser.displayName}</span>
+            &gt; Voice User: <span className="text-orange-400 font-bold">{authUser.displayName}</span>
             <span className="text-gray-500 ml-2">(@{authUser.username})</span>
-            {isAdmin(authUser) && <span className="text-red-400 ml-2">👑 ADMIN</span>}
+            {isAdmin(authUser) && <span className="text-red-400 ml-2 font-bold">👑 ADMIN</span>}
           </span>
           <span className="text-xs text-gray-500">
-            &gt; Mic: {micPermission === 'granted' ? '🎤 READY' : '🎤 NEEDS_PERMISSION'} | 
-            Realtime: {isConnected ? '📡 SYNC' : '📡 OFFLINE'}
+            &gt; Mic: <span className="font-bold">{micPermission === 'granted' ? '🎤 READY' : '🎤 NEEDS_PERMISSION'}</span> | 
+            Realtime: <span className="font-bold">{isConnected ? '📡 SYNC' : '📡 OFFLINE'}</span>
           </span>
         </div>
       </div>
@@ -473,11 +468,11 @@ export default function JumkoeTalkiePage() {
         
         {/* User List */}
         <div className="lg:w-1/3 retro-border border-r-0 lg:border-r-2 border-b-2 lg:border-b-0 border-green-400 p-4 bg-black bg-opacity-80">
-          <h3 className="text-lg retro-glow mb-4">&gt; CONNECTED USERS</h3>
+          <h3 className="text-lg retro-glow mb-4 font-bold">&gt; CONNECTED USERS</h3>
           
           {isLoading ? (
             <div className="text-center text-gray-500 mt-8">
-              <p className="text-sm">&gt; Scanning voice channels...</p>
+              <p className="text-sm font-bold">&gt; Scanning voice channels...</p>
               <div className="mt-2">
                 <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1"></span>
                 <span className="inline-block w-2 h-2 bg-green-400 retro-pulse mr-1 delay-100"></span>
@@ -486,8 +481,8 @@ export default function JumkoeTalkiePage() {
             </div>
           ) : connectedUsers.length === 0 ? (
             <div className="text-center text-gray-500 mt-8">
-              <p className="text-sm">&gt; No users connected</p>
-              <p className="text-xs mt-2 text-green-400">&gt; Be the first to join!</p>
+              <p className="text-sm font-bold">&gt; No users connected</p>
+              <p className="text-xs mt-2 text-green-400 font-bold">&gt; Be the first to join!</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -499,10 +494,10 @@ export default function JumkoeTalkiePage() {
                       <span className="text-green-400 font-bold">{user.displayName}</span>
                       <div className="flex items-center space-x-2">
                         {user.isSpeaking && (
-                          <span className="text-red-400 text-xs animate-pulse">🔴 SPEAKING</span>
+                          <span className="text-red-400 text-xs animate-pulse font-bold">🔴 SPEAKING</span>
                         )}
                         {isP2PConnected && (
-                          <span className="text-blue-400 text-xs">📞 P2P</span>
+                          <span className="text-blue-400 text-xs font-bold">📞 P2P</span>
                         )}
                         <div className={`w-2 h-2 retro-pulse ${
                           isP2PConnected ? 'bg-blue-400' : 
@@ -512,7 +507,7 @@ export default function JumkoeTalkiePage() {
                     </div>
                     <span className="text-xs text-gray-500">@{user.username}</span>
                     {isP2PConnected && (
-                      <div className="text-xs text-blue-400 mt-1">
+                      <div className="text-xs text-blue-400 mt-1 font-bold">
                         &gt; Direct voice connection active
                       </div>
                     )}
@@ -523,72 +518,82 @@ export default function JumkoeTalkiePage() {
           )}
         </div>
 
-        {/* PTT Control Area */}
+        {/* Voice Control Area */}
         <div className="flex-1 flex flex-col justify-center items-center p-8 bg-black bg-opacity-80">
           
           {micPermission !== 'granted' && (
             <div className="retro-border p-6 mb-8 bg-red-900 bg-opacity-30 border-red-400">
-              <h3 className="text-red-400 text-lg mb-4">&gt; MICROPHONE ACCESS REQUIRED</h3>
+              <h3 className="text-red-400 text-lg mb-4 font-bold">&gt; MICROPHONE ACCESS REQUIRED</h3>
               <p className="text-sm text-gray-300 mb-4">
                 Jumkoe-Talkie needs microphone access for voice communication.
               </p>
               <button 
                 onClick={requestMicPermission}
-                className="retro-button border-red-400 text-red-400 hover:bg-red-400 hover:text-black"
+                className="retro-button border-red-400 text-red-400 hover:bg-red-400 hover:text-black font-bold"
               >
                 GRANT PERMISSION
               </button>
             </div>
           )}
 
-          {/* PTT Button */}
+          {/* Discord-style Toggle Button */}
           <div className="text-center">
             <div className="mb-6">
-              <h2 className="text-2xl md:text-3xl retro-glow mb-2">
-                PUSH TO TALK
+              <h2 className="text-2xl md:text-3xl retro-glow mb-2 font-bold">
+                VOICE CHAT
               </h2>
-              <p className="text-sm text-gray-400">
-                Hold button or press SPACE to transmit
+              <p className="text-sm text-gray-400 font-bold">
+                Click to toggle microphone or press SPACE
               </p>
             </div>
 
             <button
-              onMouseDown={handlePTTStart}
-              onMouseUp={handlePTTEnd}
-              onTouchStart={handlePTTStart}
-              onTouchEnd={handlePTTEnd}
+              onClick={toggleMicrophone}
               disabled={micPermission !== 'granted'}
               className={`
-                w-32 h-32 md:w-40 md:h-40 rounded-full border-4 text-xl md:text-2xl font-bold
-                transition-all duration-150 select-none
-                ${isPTTActive 
-                  ? 'bg-red-400 border-red-600 text-black shadow-[0_0_30px_15px_rgba(255,0,0,0.3)]' 
+                w-32 h-32 md:w-40 md:h-40 rounded-full border-4 text-lg md:text-xl font-bold
+                transition-all duration-300 select-none font-mono
+                ${isMicOn 
+                  ? 'bg-green-500 border-green-400 text-black shadow-[0_0_30px_15px_rgba(0,255,65,0.4)] scale-105' 
                   : micPermission === 'granted'
-                    ? 'bg-gray-800 border-green-400 text-green-400 hover:bg-gray-700 shadow-[0_0_15px_8px_rgba(0,255,65,0.2)]'
+                    ? 'bg-gray-800 border-gray-500 text-gray-400 hover:bg-gray-700 hover:border-gray-400 shadow-[0_0_15px_8px_rgba(128,128,128,0.2)]'
                     : 'bg-gray-900 border-gray-600 text-gray-600 cursor-not-allowed'
                 }
               `}
             >
-              {isPTTActive ? '🔴 ON AIR' : '🎤 PTT'}
+              <div className="flex flex-col items-center">
+                <div className="text-2xl md:text-3xl mb-1">
+                  {isMicOn ? '🎤' : '🔇'}
+                </div>
+                <div className="text-xs md:text-sm font-bold">
+                  {isMicOn ? 'ON' : 'OFF'}
+                </div>
+              </div>
             </button>
 
-            {isPTTActive && (
-              <div className="mt-4 text-red-400 animate-pulse">
-                <p className="text-lg font-bold">&gt; TRANSMITTING</p>
+            {isMicOn && (
+              <div className="mt-4 text-green-400">
+                <p className="text-lg font-bold">&gt; MICROPHONE ACTIVE</p>
                 <div className="flex justify-center space-x-1 mt-2">
                   {[...Array(5)].map((_, i) => (
                     <div 
                       key={i}
                       className={`w-2 transition-all duration-150 ${
                         audioLevel > (i + 1) * 20 
-                          ? `h-${Math.min(8, Math.max(4, Math.floor(audioLevel / 20) + 2))} bg-red-400` 
-                          : 'h-4 bg-red-900'
+                          ? `h-${Math.min(8, Math.max(4, Math.floor(audioLevel / 20) + 2))} bg-green-400` 
+                          : 'h-4 bg-green-900'
                       } animate-pulse`}
                       style={{ animationDelay: `${i * 100}ms` }}
                     />
                   ))}
                 </div>
-                <p className="text-xs mt-2">Audio Level: {Math.round(audioLevel)}%</p>
+                <p className="text-xs mt-2 font-bold">Audio Level: {Math.round(audioLevel)}%</p>
+              </div>
+            )}
+
+            {!isVoiceEnabled && micPermission === 'granted' && (
+              <div className="mt-4 text-yellow-400">
+                <p className="text-sm font-bold">&gt; Click to join voice channel</p>
               </div>
             )}
           </div>
@@ -596,13 +601,13 @@ export default function JumkoeTalkiePage() {
           {/* Instructions */}
           <div className="mt-8 text-center max-w-md">
             <div className="retro-border p-4 bg-gray-900 bg-opacity-50">
-              <h4 className="text-green-400 text-sm mb-2">&gt; INSTRUCTIONS</h4>
+              <h4 className="text-green-400 text-sm mb-2 font-bold">&gt; CONTROLS</h4>
               <ul className="text-xs text-gray-400 space-y-1 text-left">
-                <li>&gt; Hold PTT button to transmit</li>
-                <li>&gt; Press SPACE key for quick PTT</li>
-                <li>&gt; Real-time user presence sync</li>
-                <li>&gt; Voice activity detection active</li>
-                <li>&gt; Echo cancellation enabled</li>
+                <li className="font-bold">&gt; Click button to toggle microphone</li>
+                <li className="font-bold">&gt; Press SPACE for quick toggle</li>
+                <li className="font-bold">&gt; Real-time P2P voice communication</li>
+                <li className="font-bold">&gt; Echo cancellation enabled</li>
+                <li className="font-bold">&gt; Auto noise suppression active</li>
               </ul>
             </div>
           </div>
