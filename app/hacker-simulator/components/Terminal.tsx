@@ -32,6 +32,9 @@ export default function Terminal({
     currentTime: new Date()
   })
 
+  // Remove all line breaks from target text
+  const cleanTargetText = targetText.replace(/\n/g, ' ')
+
   // Cursor blinking effect
   useEffect(() => {
     const interval: NodeJS.Timeout = setInterval(() => {
@@ -54,43 +57,38 @@ export default function Terminal({
     }
   }, [userInput])
 
-  // Handle key press including Enter
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Handle Enter key for mission completion
-    if (e.key === 'Enter') {
-      e.preventDefault()
+  // Check completion when user input changes
+  useEffect(() => {
+    if (userInput.length > 0 && cleanTargetText.length > 0) {
+      const progress = (userInput.length / cleanTargetText.length) * 100
       
-      // Check if user input matches target text exactly
-      if (userInput.trim() === targetText.trim()) {
-        // Mission completed successfully
+      // Calculate accuracy
+      const correctChars = userInput.split('').filter((char, index) => char === cleanTargetText[index]).length
+      const accuracy = Math.round((correctChars / userInput.length) * 100)
+      
+      setStats(prev => ({
+        ...prev,
+        accuracy,
+        currentTime: new Date()
+      }))
+
+      // Auto-complete when progress reaches 100%
+      if (progress >= 100 && userInput === cleanTargetText) {
         setMissionComplete(true)
         onComplete?.({
           wpm: stats.wpm,
-          accuracy: stats.accuracy,
+          accuracy: accuracy,
           errors: stats.errors,
           completedAt: new Date()
         })
-      } else {
-        // Mission failed, show error
-        setStats(prev => ({ ...prev, errors: prev.errors + 1 }))
       }
     }
-  }
+  }, [userInput, cleanTargetText, stats.wpm, stats.errors, onComplete])
 
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setUserInput(value)
-    
-    // Calculate basic stats
-    const accuracy = targetText.length > 0 ? 
-      Math.round((value.split('').filter((char, index) => char === targetText[index]).length / Math.max(value.length, 1)) * 100) : 100
-    
-    setStats(prev => ({
-      ...prev,
-      accuracy,
-      currentTime: new Date()
-    }))
   }
 
   // Prevent copy/paste
@@ -104,7 +102,7 @@ export default function Terminal({
 
   // Render target text with character-by-character highlighting
   const renderTargetText = () => {
-    return targetText.split('').map((char, index) => {
+    return cleanTargetText.split('').map((char, index) => {
       let className = 'font-dunggeun'
       
       if (index < userInput.length) {
@@ -124,21 +122,14 @@ export default function Terminal({
 
       return (
         <span key={index} className={className}>
-          {char === '\n' ? (
-            <>
-              ↵
-              <br />
-            </>
-          ) : (
-            char
-          )}
+          {char}
         </span>
       )
     })
   }
 
   // Calculate progress
-  const progress = targetText.length > 0 ? (userInput.length / targetText.length) * 100 : 0
+  const progress = cleanTargetText.length > 0 ? (userInput.length / cleanTargetText.length) * 100 : 0
 
   return (
     <div className={`dos-terminal ${className}`}>
@@ -176,7 +167,7 @@ export default function Terminal({
               <div>Target System: <span className="text-yellow-400">CLASSIFIED</span></div>
               <div className="text-gray-500">----------------------------------------</div>
               <div className="mb-4">
-                Initiating command sequence... Type the entire command sequence and press ENTER to execute.
+                Initiating command sequence... Type the command sequence below.
               </div>
             </div>
 
@@ -209,29 +200,6 @@ export default function Terminal({
               </div>
             </div>
 
-            {/* User's Typed Commands Display */}
-            <div className="mb-4">
-              <div className="text-blue-400 text-xs mb-2">YOUR INPUT:</div>
-              <div className="bg-blue-900 bg-opacity-20 border border-blue-600 p-3 min-h-[100px]">
-                <div className="text-blue-300 whitespace-pre-wrap text-sm">
-                  {userInput || <span className="text-gray-500">Start typing...</span>}
-                  {showCursor && !missionComplete && <span className="text-blue-400 animate-pulse">_</span>}
-                </div>
-              </div>
-            </div>
-
-            {/* Error Display */}
-            {stats.errors > 0 && (
-              <div className="mb-4">
-                <div className="text-red-400 text-xs mb-1">EXECUTION ERRORS: {stats.errors}</div>
-                <div className="bg-red-900 bg-opacity-30 border border-red-600 p-2">
-                  <div className="text-red-300 text-xs">
-                    ⚠️ Command sequence does not match required input. Please try again.
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Completion Message */}
             {missionComplete && (
               <div className="mb-4">
@@ -253,10 +221,10 @@ export default function Terminal({
             {!missionComplete && (
               <div className="mb-4">
                 <div className="text-yellow-400 text-xs">
-                  INSTRUCTIONS: Type the entire command sequence above, then press ENTER to execute.
+                  INSTRUCTIONS: Type the command sequence above. Mission completes automatically at 100%.
                 </div>
                 <div className="text-gray-400 text-xs mt-1">
-                  Match exactly including spaces and line breaks. Copy/Paste disabled.
+                  Match exactly including spaces. Copy/Paste disabled.
                 </div>
               </div>
             )}
@@ -265,24 +233,28 @@ export default function Terminal({
             <div style={{ height: '20px' }}></div>
           </div>
 
-          {/* Fixed Input Line at Bottom */}
+          {/* Fixed Input Area at Bottom - SINGLE INPUT ONLY */}
           <div className="dos-input absolute bottom-0 left-0 right-0 bg-black border-t border-gray-700 p-4">
-            <div className="font-dunggeun text-green-400 flex items-center">
-              <span className="text-green-400 mr-2">C:\HACK&gt;</span>
-              <input
-                ref={inputRef}
-                type="text"
-                value={userInput}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                onCopy={handleCopy}
-                onPaste={handlePaste}
-                className="flex-1 bg-transparent border-none outline-none text-green-400 font-dunggeun text-sm"
-                disabled={!isActive || missionComplete}
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={missionComplete ? "Mission Complete" : "Type command sequence here..."}
-              />
+            <div className="mb-2">
+              <div className="text-blue-400 text-xs mb-1">YOUR INPUT:</div>
+              <div className="bg-blue-900 bg-opacity-20 border border-blue-600 p-3 min-h-[60px]">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={userInput}
+                  onChange={handleInputChange}
+                  onCopy={handleCopy}
+                  onPaste={handlePaste}
+                  className="w-full bg-transparent border-none outline-none text-blue-300 font-dunggeun text-sm"
+                  disabled={!isActive || missionComplete}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={missionComplete ? "Mission Complete" : "Start typing the command sequence..."}
+                />
+                {showCursor && !missionComplete && userInput.length === 0 && (
+                  <span className="text-blue-400 animate-pulse">_</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -307,33 +279,12 @@ export default function Terminal({
         >
           RESET SYSTEM
         </button>
-        
-        {!missionComplete && (
-          <button 
-            onClick={() => {
-              if (userInput.trim() === targetText.trim()) {
-                setMissionComplete(true)
-                onComplete?.({
-                  wpm: stats.wpm,
-                  accuracy: stats.accuracy,
-                  errors: stats.errors,
-                  completedAt: new Date()
-                })
-              } else {
-                setStats(prev => ({ ...prev, errors: prev.errors + 1 }))
-              }
-            }}
-            className="retro-button border-green-400 text-green-400 hover:bg-green-400 hover:text-black px-6 py-2 font-bold"
-          >
-            EXECUTE COMMAND
-          </button>
-        )}
       </div>
 
       {/* Instructions */}
       <div className="text-center text-gray-400 text-sm mt-4 font-dunggeun">
-        <div>Type the entire command sequence in the terminal, then press ENTER or click EXECUTE</div>
-        <div className="text-xs mt-1">Window is resizable and draggable | Copy/Paste disabled for security</div>
+        <div>Type the command sequence - mission completes automatically when you reach 100%</div>
+        <div className="text-xs mt-1">Window is resizable and draggable | Copy/Paste disabled</div>
       </div>
 
       {/* CSS Styles */}
@@ -384,7 +335,7 @@ export default function Terminal({
         }
         
         .dos-input {
-          min-height: 60px;
+          min-height: 100px;
         }
         
         .dos-input input::placeholder {
