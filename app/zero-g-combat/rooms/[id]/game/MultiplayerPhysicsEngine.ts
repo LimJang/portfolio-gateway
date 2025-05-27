@@ -86,7 +86,8 @@ export default class MultiplayerPhysicsEngine {
     }
     
     // 모든 스폰 포인트가 사용된 경우, 가장 오래된 것 재사용
-    const oldestIndex = Math.min(...this.usedSpawnPoints);
+        const usedIndexes = Array.from(this.usedSpawnPoints);
+    const oldestIndex = Math.min(...usedIndexes);
     return this.spawnPoints[oldestIndex];
   }
 
