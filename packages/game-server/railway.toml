@@ -1,0 +1,7 @@
+# Railway Configuration
+# Environment variables needed:
+# - FRONTEND_URL (URL of the frontend deployment)
+# - PORT (automatically set by Railway)
+
+# Build command: npm run build
+# Start command: npm start

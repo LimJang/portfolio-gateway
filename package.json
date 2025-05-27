@@ -1,29 +1,26 @@
 {
-  "name": "portfolio-gateway",
-  "version": "0.1.0",
+  "name": "portfolio-gateway-monorepo",
+  "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.49.8",
-    "@types/matter-js": "^0.19.8",
-    "matter-js": "^0.20.0",
-    "next": "14.2.3",
-    "react": "^18",
-    "react-dom": "^18"
+    "dev": "npm run dev --workspace=frontend",
+    "dev:server": "npm run dev --workspace=game-server",
+    "dev:all": "concurrently \"npm run dev --workspace=frontend\" \"npm run dev --workspace=game-server\"",
+    "build": "npm run build --workspaces",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:server": "npm run build --workspace=game-server",
+    "start": "npm run start --workspace=frontend",
+    "deploy:frontend": "npm run build --workspace=frontend",
+    "deploy:server": "npm run build --workspace=game-server",
+    "install:all": "npm install && npm install --workspaces"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.3",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5"
-  }
+    "concurrently": "^8.2.2"
+  },
+  "description": "Portfolio Gateway Monorepo - Frontend (Vercel) + Game Server (Railway)",
+  "author": "LimJang",
+  "license": "MIT"
 }

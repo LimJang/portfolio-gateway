@@ -1,10 +1,55 @@
+# Dependencies
 node_modules/
+packages/*/node_modules/
+
+# Build outputs
 .next/
-*.log
-.DS_Store
-memory-bank/
-.env*
 dist/
 build/
-legacy-socketio/
+packages/*/.next/
+packages/*/dist/
+packages/*/build/
+
+# Environment files
+.env*
+packages/*/.env*
+!.env.example
+!packages/*/.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Deployment
 .vercel
+.railway
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+memory-bank/
+legacy-socketio/
+
+# TypeScript
+*.tsbuildinfo
+packages/*/tsconfig.tsbuildinfo
