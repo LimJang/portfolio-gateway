@@ -22,6 +22,14 @@ export default function Terminal({
   const inputRef = useRef<HTMLInputElement>(null)
   const outputRef = useRef<HTMLDivElement>(null)
   const [showCursor, setShowCursor] = useState(true)
+  const [currentLine, setCurrentLine] = useState('')
+  const [completedLines, setCompletedLines] = useState<string[]>([])
+
+  // Split target text into lines for line-by-line processing
+  const targetLines = targetText.split('\n')
+  const currentTargetLine = completedLines.length < targetLines.length 
+    ? targetLines[completedLines.length] 
+    : ''
 
   const {
     userInput,
@@ -36,8 +44,21 @@ export default function Terminal({
     currentChar,
     errors
   } = useTyping({
-    targetText,
-    onComplete,
+    targetText: currentTargetLine, // Process one line at a time
+    onComplete: (stats) => {
+      // Line completed
+      const newCompletedLines = [...completedLines, currentLine]
+      setCompletedLines(newCompletedLines)
+      setCurrentLine('')
+      
+      // Check if all lines are completed
+      if (newCompletedLines.length >= targetLines.length) {
+        onComplete?.(stats)
+      } else {
+        // Reset for next line
+        resetTyping()
+      }
+    },
     onKeystroke,
     onStatsUpdate: (stats) => {
       // Real-time stats updates
@@ -64,25 +85,43 @@ export default function Terminal({
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight
     }
-  }, [userInput, errors])
+  }, [completedLines, currentLine, errors])
 
   // Handle key press including Enter
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!typingActive && userInput.length === 0) {
+    if (!typingActive && currentLine.length === 0) {
       startTyping()
     }
     
-    // Handle Enter key
+    // Handle Enter key for line completion
     if (e.key === 'Enter') {
       e.preventDefault()
-      const newInput = userInput + '\n'
-      handleInput(newInput)
+      
+      // Check if current line matches target line
+      if (currentLine === currentTargetLine) {
+        // Line is correct, move to next line
+        const newCompletedLines = [...completedLines, currentLine]
+        setCompletedLines(newCompletedLines)
+        setCurrentLine('')
+        
+        // Check if all lines are completed
+        if (newCompletedLines.length >= targetLines.length) {
+          onComplete?.(stats)
+        } else {
+          // Reset for next line
+          resetTyping()
+        }
+      } else {
+        // Line is incorrect, show error but allow retry
+        console.log('Line incorrect, retry needed')
+      }
     }
   }
 
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
+    setCurrentLine(value)
     handleInput(value)
   }
 
@@ -97,69 +136,77 @@ export default function Terminal({
 
   // Render target text with character-by-character highlighting
   const renderTargetText = () => {
-    return targetText.split('').map((char, index) => {
-      let className = 'font-dunggeun'
+    return targetLines.map((line, lineIndex) => {
+      let lineClass = 'font-dunggeun mb-1'
       
-      if (index < userInput.length) {
-        // Already typed characters
-        if (userInput[index] === char) {
-          className += ' text-green-400'
-        } else {
-          className += ' text-red-400 bg-red-900'
-        }
-      } else if (index === userInput.length) {
-        // Current character to type
-        className += ` text-yellow-400 ${showCursor ? 'bg-yellow-900' : ''}`
+      if (lineIndex < completedLines.length) {
+        // Completed lines
+        lineClass += ' text-green-400'
+      } else if (lineIndex === completedLines.length) {
+        // Current line being typed
+        lineClass += ' text-yellow-400'
+        
+        return (
+          <div key={lineIndex} className={lineClass}>
+            {line.split('').map((char, charIndex) => {
+              let className = ''
+              
+              if (charIndex < currentLine.length) {
+                // Already typed characters
+                if (currentLine[charIndex] === char) {
+                  className = 'text-green-400'
+                } else {
+                  className = 'text-red-400 bg-red-900'
+                }
+              } else if (charIndex === currentLine.length) {
+                // Current character to type
+                className = `text-yellow-400 ${showCursor ? 'bg-yellow-900' : ''}`
+              } else {
+                // Future characters
+                className = 'text-gray-400'
+              }
+
+              return (
+                <span key={charIndex} className={className}>
+                  {char}
+                </span>
+              )
+            })}
+          </div>
+        )
       } else {
-        // Future characters
-        className += ' text-gray-500'
+        // Future lines
+        lineClass += ' text-gray-500'
       }
 
       return (
-        <span key={index} className={className}>
-          {char === ' ' ? '·' : char === '\n' ? '↵\n' : char}
-        </span>
+        <div key={lineIndex} className={lineClass}>
+          {line}
+        </div>
       )
     })
   }
 
   // Render current input line
   const renderCurrentInput = () => {
-    const lines = userInput.split('\n')
-    const currentLine = lines[lines.length - 1] || ''
-    
     return (
       <div className="font-dunggeun text-green-400">
         <span className="text-green-400">C:\HACK&gt; </span>
-        <span>
-          {currentLine.split('').map((char, index) => (
-            <span key={index} className="text-green-400">
-              {char === ' ' ? '·' : char}
-            </span>
-          ))}
-          {showCursor && <span className="text-green-400 animate-pulse">_</span>}
+        <span className="text-green-400">
+          {currentLine}
+          {showCursor && <span className="animate-pulse">_</span>}
         </span>
       </div>
     )
   }
 
+  // Calculate overall progress
+  const overallProgress = targetLines.length > 0 
+    ? ((completedLines.length + (currentLine.length / Math.max(currentTargetLine.length, 1))) / targetLines.length) * 100
+    : 0
+
   return (
     <div className={`dos-terminal ${className}`}>
-      {/* Hidden input for capturing keystrokes */}
-      <input
-        ref={inputRef}
-        type="text"
-        value={userInput.replace(/\n/g, '')} // Remove newlines for input field
-        onChange={handleInputChange}
-        onKeyDown={handleKeyDown}
-        onCopy={handleCopy}
-        onPaste={handlePaste}
-        className="absolute opacity-0 pointer-events-none"
-        disabled={!isActive || isComplete}
-        autoComplete="off"
-        spellCheck={false}
-      />
-
       {/* DOS Terminal Window */}
       <div className="dos-window bg-black border-2 border-gray-600 shadow-2xl font-dunggeun">
         {/* Window Title Bar */}
@@ -194,7 +241,7 @@ export default function Terminal({
               <div>Target System: <span className="text-yellow-400">CLASSIFIED</span></div>
               <div className="text-gray-500">----------------------------------------</div>
               <div className="mb-4">
-                Initiating command sequence... Type each command exactly as shown.
+                Initiating command sequence... Type each command exactly as shown, press ENTER to execute.
               </div>
             </div>
 
@@ -204,7 +251,7 @@ export default function Terminal({
                 <div>WPM: <span className="text-yellow-400">{stats.wpm}</span></div>
                 <div>ACC: <span className="text-blue-400">{stats.accuracy}%</span></div>
                 <div>ERR: <span className="text-red-400">{stats.errors}</span></div>
-                <div>PROG: <span className="text-green-400">{Math.round(progress)}%</span></div>
+                <div>PROG: <span className="text-green-400">{Math.round(overallProgress)}%</span></div>
               </div>
             </div>
 
@@ -222,10 +269,24 @@ export default function Terminal({
               <div className="bg-gray-800 h-2 border border-gray-600">
                 <div 
                   className="bg-green-400 h-full transition-all duration-300"
-                  style={{ width: `${progress}%` }}
+                  style={{ width: `${overallProgress}%` }}
                 />
               </div>
             </div>
+
+            {/* Completed Commands Display */}
+            {completedLines.length > 0 && (
+              <div className="mb-4">
+                <div className="text-green-400 text-xs mb-1">EXECUTED COMMANDS:</div>
+                <div className="bg-green-900 bg-opacity-20 border border-green-600 p-2">
+                  {completedLines.map((line, index) => (
+                    <div key={index} className="text-green-300 text-xs">
+                      ✅ {line}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Error Messages */}
             {errors.length > 0 && (
@@ -241,19 +302,20 @@ export default function Terminal({
               </div>
             )}
 
-            {/* Next Character Hint */}
-            {currentChar && !isComplete && (
+            {/* Current Line Status */}
+            {currentTargetLine && !isComplete && (
               <div className="mb-4">
                 <div className="text-yellow-400 text-xs">
-                  NEXT INPUT: <span className="text-xl font-bold ml-2">
-                    {currentChar === ' ' ? '[SPACE]' : currentChar === '\n' ? '[ENTER]' : currentChar}
-                  </span>
+                  CURRENT COMMAND: <span className="text-white font-bold ml-2">{currentTargetLine}</span>
+                </div>
+                <div className="text-gray-400 text-xs mt-1">
+                  Progress: {currentLine.length}/{currentTargetLine.length} characters | Press ENTER when complete
                 </div>
               </div>
             )}
 
             {/* Completion Message */}
-            {isComplete && (
+            {completedLines.length >= targetLines.length && (
               <div className="mb-4">
                 <div className="text-green-400 border border-green-400 p-3">
                   <div className="text-center">
@@ -275,8 +337,25 @@ export default function Terminal({
 
           {/* Fixed Input Line at Bottom */}
           <div className="dos-input absolute bottom-0 left-0 right-0 bg-black border-t border-gray-700 p-4">
-            {!isComplete && renderCurrentInput()}
-            {isComplete && (
+            {completedLines.length < targetLines.length ? (
+              <div className="relative">
+                {renderCurrentInput()}
+                {/* Hidden input field for actual typing */}
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={currentLine}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  onCopy={handleCopy}
+                  onPaste={handlePaste}
+                  className="absolute top-0 left-0 w-full h-full opacity-0 bg-transparent border-none outline-none font-dunggeun"
+                  disabled={!isActive}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+            ) : (
               <div className="font-dunggeun text-green-400">
                 <span className="text-green-400">C:\HACK&gt; </span>
                 <span className="text-gray-400">System breached successfully. Awaiting new commands...</span>
@@ -289,7 +368,7 @@ export default function Terminal({
 
       {/* Control Buttons Below Terminal */}
       <div className="flex justify-center space-x-4 mt-4">
-        {!typingActive && userInput.length === 0 && (
+        {!typingActive && currentLine.length === 0 && completedLines.length === 0 && (
           <button 
             onClick={startTyping}
             className="retro-button border-green-400 text-green-400 hover:bg-green-400 hover:text-black px-6 py-2 font-bold"
@@ -298,9 +377,14 @@ export default function Terminal({
           </button>
         )}
         
-        {typingActive && (
+        {(typingActive || currentLine.length > 0) && completedLines.length < targetLines.length && (
           <button 
-            onClick={stopTyping}
+            onClick={() => {
+              stopTyping()
+              setCurrentLine('')
+              setCompletedLines([])
+              resetTyping()
+            }}
             className="retro-button border-red-400 text-red-400 hover:bg-red-400 hover:text-black px-6 py-2 font-bold"
           >
             ABORT MISSION
@@ -308,7 +392,12 @@ export default function Terminal({
         )}
         
         <button 
-          onClick={resetTyping}
+          onClick={() => {
+            stopTyping()
+            setCurrentLine('')
+            setCompletedLines([])
+            resetTyping()
+          }}
           className="retro-button border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black px-6 py-2 font-bold"
         >
           RESET SYSTEM
@@ -316,10 +405,10 @@ export default function Terminal({
       </div>
 
       {/* Instructions */}
-      {!typingActive && userInput.length === 0 && (
+      {!typingActive && currentLine.length === 0 && completedLines.length === 0 && (
         <div className="text-center text-gray-400 text-sm mt-4 font-dunggeun">
           <div>Click the terminal and start typing to begin the hack...</div>
-          <div className="text-xs mt-1">Press ENTER for new lines | Spaces shown as dots (·)</div>
+          <div className="text-xs mt-1">Type each command line by line | Press ENTER to execute each command</div>
           <div className="text-xs mt-1 text-red-400">⚠️ Copy/Paste disabled for security</div>
         </div>
       )}
