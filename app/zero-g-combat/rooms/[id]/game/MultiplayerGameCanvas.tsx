@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import MultiplayerPhysicsEngine from './MultiplayerPhysicsEngine';
 
 interface GameRoom {
   id: string;
@@ -39,6 +40,7 @@ export default function MultiplayerGameCanvas({
   onGameEnd
 }: MultiplayerGameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const physicsEngineRef = useRef<MultiplayerPhysicsEngine | null>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const [gameStats, setGameStats] = useState({
     position: { x: 0, y: 0 },
@@ -47,13 +49,73 @@ export default function MultiplayerGameCanvas({
     alive_players: 0
   });
 
-  // 키보드 입력 처리
+  // Initialize physics engine
+  useEffect(() => {
+    if (!canvasRef.current) return;
+
+    const handlePlayerUpdate = (playerId: string, data: any) => {
+      // This would normally send to server, but for now we'll handle locally
+      // In production, this would update the database
+    };
+
+    const handlePlayerDeath = (playerId: string) => {
+      if (playerId === currentPlayer.id) {
+        // Current player died
+        console.log('Current player died!');
+      }
+    };
+
+    const initPhysics = async () => {
+      try {
+        const engine = new MultiplayerPhysicsEngine(
+          canvasRef.current!,
+          currentPlayer.id,
+          handlePlayerUpdate,
+          handlePlayerDeath
+        );
+        
+        physicsEngineRef.current = engine;
+        
+        // Wait for physics engine to initialize
+        setTimeout(() => {
+          // Add all players to physics world
+          players.forEach(player => {
+            if (physicsEngineRef.current) {
+              physicsEngineRef.current.addOrUpdatePlayer(player);
+            }
+          });
+        }, 1000);
+        
+      } catch (error) {
+        console.error('Physics engine initialization failed:', error);
+      }
+    };
+
+    initPhysics();
+
+    return () => {
+      if (physicsEngineRef.current) {
+        physicsEngineRef.current.destroy();
+      }
+    };
+  }, [currentPlayer.id]);
+
+  // Update players in physics engine when data changes
+  useEffect(() => {
+    if (physicsEngineRef.current) {
+      players.forEach(player => {
+        physicsEngineRef.current!.addOrUpdatePlayer(player);
+      });
+    }
+  }, [players]);
+
+  // Keyboard input handling
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       keysRef.current[key] = true;
       
-      // 스페이스바 스크롤 방지
+      // Prevent space bar from scrolling
       if (event.key === ' ') {
         event.preventDefault();
       }
@@ -77,111 +139,172 @@ export default function MultiplayerGameCanvas({
     };
   }, []);
 
-  // 입력 처리 및 서버 전송
+  // Input processing and physics update
   useEffect(() => {
-    const inputInterval = setInterval(() => {
-      if (!currentPlayer.is_alive) return;
+    const gameLoop = setInterval(() => {
+      if (!physicsEngineRef.current || !currentPlayer.is_alive) return;
 
-      let inputSent = false;
+      let inputProcessed = false;
 
-      // A키: 좌회전
+      // Handle input
       if (keysRef.current['a']) {
+        physicsEngineRef.current.handlePlayerInput('rotate_left');
         onPlayerInput('rotate_left');
-        inputSent = true;
+        inputProcessed = true;
       }
 
-      // D키: 우회전
       if (keysRef.current['d']) {
+        physicsEngineRef.current.handlePlayerInput('rotate_right');
         onPlayerInput('rotate_right');
-        inputSent = true;
+        inputProcessed = true;
       }
 
-      // SPACE: 추진
       if (keysRef.current[' ']) {
+        physicsEngineRef.current.handlePlayerInput('thrust');
         onPlayerInput('thrust');
-        inputSent = true;
+        inputProcessed = true;
       }
-    }, 50); // 20fps로 입력 전송
 
-    return () => clearInterval(inputInterval);
-  }, [currentPlayer.is_alive, onPlayerInput]);
+      // Update physics
+      physicsEngineRef.current.update();
 
-  // 게임 렌더링
+      // Update stats from physics engine
+      const currentPlayerData = physicsEngineRef.current.getCurrentPlayerData();
+      if (currentPlayerData) {
+        setGameStats({
+          position: { 
+            x: currentPlayerData.position_x, 
+            y: currentPlayerData.position_y 
+          },
+          velocity: { 
+            x: currentPlayerData.velocity_x, 
+            y: currentPlayerData.velocity_y 
+          },
+          direction: currentPlayerData.direction,
+          alive_players: players.filter(p => p.is_alive).length
+        });
+      }
+    }, 1000 / 60); // 60 FPS
+
+    return () => clearInterval(gameLoop);
+  }, [currentPlayer.is_alive, onPlayerInput, players]);
+
+  // Rendering
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvasRef.current || !physicsEngineRef.current) return;
 
+    const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const render = () => {
-      // 캔버스 클리어
+      // Clear canvas
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, 800, 600);
 
-      // 경계선 그리기
+      // Draw boundaries
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 3;
       ctx.strokeRect(0, 0, 800, 600);
 
-      // 장애물 그리기 (간단한 사각형)
-      ctx.fillStyle = '#888888';
-      ctx.fillRect(350, 250, 100, 100); // 중앙 장애물
+      // Draw obstacles
+      const obstacles = physicsEngineRef.current!.getObstacles();
+      obstacles.forEach(obstacle => {
+        if (obstacle.body) {
+          const pos = obstacle.body.position;
+          const angle = obstacle.body.angle;
+          
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(angle);
+          
+          if (obstacle.constructor.name === 'Satellite') {
+            // Draw satellite as rectangle
+            ctx.fillStyle = '#888888';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.fillRect(-20, -30, 40, 60);
+            ctx.strokeRect(-20, -30, 40, 60);
+          } else if (obstacle.constructor.name === 'Asteroid') {
+            // Draw asteroid as polygon
+            ctx.fillStyle = '#8B4513';
+            ctx.strokeStyle = '#CD853F';
+            ctx.lineWidth = 1;
+            
+            // Simple hexagon
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+              const angle = (i * Math.PI * 2) / 6;
+              const x = Math.cos(angle) * 15;
+              const y = Math.sin(angle) * 15;
+              if (i === 0) {
+                ctx.moveTo(x, y);
+              } else {
+                ctx.lineTo(x, y);
+              }
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+          
+          ctx.restore();
+        }
+      });
 
-      // 플레이어들 그리기
-      players.forEach(player => {
-        if (!player.is_alive) return;
+      // Draw players using physics engine data
+      const physicsPlayers = physicsEngineRef.current!.getAllPlayers();
+      physicsPlayers.forEach(({ id, player, body }) => {
+        if (!body || !player.isAlive) return;
+
+        const playerData = players.find(p => p.id === id);
+        if (!playerData) return;
 
         ctx.save();
         
-        // 플레이어 위치로 이동
-        ctx.translate(player.position_x, player.position_y);
-        ctx.rotate((player.direction * Math.PI) / 180);
+        // Player position from physics engine
+        ctx.translate(body.position.x, body.position.y);
+        ctx.rotate(body.angle);
 
-        // 삼각형 우주선 그리기
-        ctx.fillStyle = player.color;
+        // Draw triangle spaceship
+        ctx.fillStyle = player.isThrusting ? '#ffff00' : playerData.color;
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2;
 
         ctx.beginPath();
-        ctx.moveTo(0, -15);  // 앞쪽 끝
-        ctx.lineTo(-8, 10);  // 뒤쪽 왼쪽
-        ctx.lineTo(8, 10);   // 뒤쪽 오른쪽
+        ctx.moveTo(0, -15);  // Front point
+        ctx.lineTo(-8, 10);  // Back left
+        ctx.lineTo(8, 10);   // Back right
         ctx.closePath();
-        
-        // 추진 시 색상 변경
-        if (player.is_thrusting) {
-          ctx.fillStyle = '#ffff00';
-        }
-        
         ctx.fill();
         ctx.stroke();
 
-        // 플레이어 이름 표시
         ctx.restore();
-        ctx.fillStyle = player.color;
+
+        // Draw player name
+        ctx.fillStyle = playerData.color;
         ctx.font = '12px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(
-          player.display_name, 
-          player.position_x, 
-          player.position_y - 25
+          playerData.display_name, 
+          body.position.x, 
+          body.position.y - 25
         );
 
-        // 현재 플레이어 표시
-        if (player.user_id === currentPlayer.user_id) {
+        // Highlight current player
+        if (id === currentPlayer.id) {
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2;
           ctx.strokeRect(
-            player.position_x - 20,
-            player.position_y - 20,
+            body.position.x - 20,
+            body.position.y - 20,
             40,
             40
           );
         }
       });
 
-      // 격자 효과 (선택사항)
+      // Draw grid
       ctx.strokeStyle = '#333333';
       ctx.lineWidth = 1;
       for (let i = 0; i < 800; i += 50) {
@@ -198,36 +321,19 @@ export default function MultiplayerGameCanvas({
       }
     };
 
-    // 60fps 렌더링
     const renderInterval = setInterval(render, 1000 / 60);
-
     return () => clearInterval(renderInterval);
   }, [players, currentPlayer]);
 
-  // 통계 업데이트
+  // Game end check
   useEffect(() => {
     const alivePlayers = players.filter(p => p.is_alive).length;
-    
-    setGameStats({
-      position: { 
-        x: currentPlayer.position_x, 
-        y: currentPlayer.position_y 
-      },
-      velocity: { 
-        x: currentPlayer.velocity_x, 
-        y: currentPlayer.velocity_y 
-      },
-      direction: currentPlayer.direction,
-      alive_players: alivePlayers
-    });
-
-    // 게임 종료 체크
     if (alivePlayers <= 1 && alivePlayers > 0) {
       setTimeout(() => {
         onGameEnd();
       }, 1000);
     }
-  }, [players, currentPlayer, onGameEnd]);
+  }, [players, onGameEnd]);
 
   return (
     <div className="relative">
@@ -250,6 +356,7 @@ export default function MultiplayerGameCanvas({
           <div>VEL: ({Math.round(gameStats.velocity.x * 10) / 10}, {Math.round(gameStats.velocity.y * 10) / 10})</div>
           <div>DIR: {Math.round(gameStats.direction)}°</div>
           <div>ALIVE: {gameStats.alive_players}</div>
+          <div className="text-yellow-400">⚡ PHYSICS: ON</div>
         </div>
       </div>
 
@@ -280,7 +387,7 @@ export default function MultiplayerGameCanvas({
         <div className="space-y-1">
           <div>A/D: Rotate</div>
           <div>SPACE: Thrust</div>
-          <div>Stay alive!</div>
+          <div className="text-cyan-400">⚡ Real Physics!</div>
         </div>
       </div>
 
@@ -292,6 +399,9 @@ export default function MultiplayerGameCanvas({
               💀 YOU DIED
             </h2>
             <p className="text-red-300">
+              Hit the boundary wall!
+            </p>
+            <p className="text-red-400/70 text-sm mt-2">
               Watching remaining players...
             </p>
           </div>
