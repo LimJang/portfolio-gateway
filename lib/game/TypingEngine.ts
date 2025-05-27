@@ -40,7 +40,7 @@ export class TypingEngine {
     this.errorCount = 0
   }
 
-  // 문자 정규화 - 모든 종류의 스페이스를 일반 스페이스로 변환
+  // 문자 정규화 - 모든 종류의 스페이스와 개행 문자 처리
   private normalizeChar(char: string): string {
     // 다양한 스페이스 문자들을 일반 스페이스로 통일
     if (char === ' ' || char === '\u00A0' || char === '\u2000' || char === '\u2001' || 
@@ -49,6 +49,12 @@ export class TypingEngine {
         char === '\u200A' || char === '\u200B' || char === '\u3000') {
       return ' '
     }
+    
+    // 다양한 개행 문자들을 일반 개행으로 통일
+    if (char === '\n' || char === '\r' || char === '\r\n') {
+      return '\n'
+    }
+    
     return char
   }
 
@@ -86,10 +92,12 @@ export class TypingEngine {
         
         const expectedDisplay = expectedChar === ' ' ? '[SPACE]' : 
                                expectedChar === '\n' ? '[ENTER]' : 
-                               expectedChar === '\t' ? '[TAB]' : expectedChar
+                               expectedChar === '\t' ? '[TAB]' : 
+                               expectedChar
         const actualDisplay = actualChar === ' ' ? '[SPACE]' : 
                               actualChar === '\n' ? '[ENTER]' : 
-                              actualChar === '\t' ? '[TAB]' : actualChar
+                              actualChar === '\t' ? '[TAB]' : 
+                              actualChar
         
         result.errors.push(`Position ${i + 1}: expected '${expectedDisplay}', got '${actualDisplay}'`)
       }
@@ -193,6 +201,22 @@ export class TypingEngine {
     return this.targetText[userInput.length]
   }
 
+  // Get current line and position within line
+  getCurrentLineInfo(userInput: string): {
+    currentLine: number
+    positionInLine: number
+    totalLines: number
+  } {
+    const inputLines = userInput.split('\n')
+    const targetLines = this.targetText.split('\n')
+    
+    return {
+      currentLine: inputLines.length - 1,
+      positionInLine: inputLines[inputLines.length - 1]?.length || 0,
+      totalLines: targetLines.length
+    }
+  }
+
   // Get detailed keystroke analysis
   getKeystrokeAnalysis(): {
     totalKeystrokes: number
@@ -227,6 +251,11 @@ export class TypingEngine {
     nextExpectedChar: string
     lastInputChar: string
     isMatching: boolean
+    lineInfo: {
+      currentLine: number
+      positionInLine: number
+      totalLines: number
+    }
     normalizedComparison: {
       expected: string
       actual: string
@@ -243,12 +272,21 @@ export class TypingEngine {
       targetLength: this.targetText.length,
       inputLength: userInput.length,
       currentPosition: this.currentPosition,
-      nextExpectedChar: nextExpectedChar === ' ' ? '[SPACE]' : nextExpectedChar,
-      lastInputChar: lastInputChar === ' ' ? '[SPACE]' : lastInputChar,
+      nextExpectedChar: nextExpectedChar === ' ' ? '[SPACE]' : 
+                        nextExpectedChar === '\n' ? '[ENTER]' : 
+                        nextExpectedChar,
+      lastInputChar: lastInputChar === ' ' ? '[SPACE]' : 
+                     lastInputChar === '\n' ? '[ENTER]' : 
+                     lastInputChar,
       isMatching: userInput.length > 0 ? this.compareChars(lastInputChar, this.targetText[userInput.length - 1]) : true,
+      lineInfo: this.getCurrentLineInfo(userInput),
       normalizedComparison: {
-        expected: normalizedExpected === ' ' ? '[SPACE]' : normalizedExpected,
-        actual: normalizedActual === ' ' ? '[SPACE]' : normalizedActual,
+        expected: normalizedExpected === ' ' ? '[SPACE]' : 
+                  normalizedExpected === '\n' ? '[ENTER]' : 
+                  normalizedExpected,
+        actual: normalizedActual === ' ' ? '[SPACE]' : 
+                normalizedActual === '\n' ? '[ENTER]' : 
+                normalizedActual,
         matches: normalizedExpected === normalizedActual
       }
     }
