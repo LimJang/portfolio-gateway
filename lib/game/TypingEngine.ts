@@ -28,7 +28,7 @@ export class TypingEngine {
   private startTime: Date | null = null
   private keystrokes: KeystrokeEvent[] = []
   private currentPosition: number = 0
-  private errors: number = 0
+  private errorCount: number = 0
 
   constructor(private targetText: string) {}
 
@@ -37,17 +37,28 @@ export class TypingEngine {
     this.startTime = new Date()
     this.keystrokes = []
     this.currentPosition = 0
-    this.errors = 0
+    this.errorCount = 0
   }
 
-  // 문자 비교 함수 - 띄어쓰기 처리 개선
-  private compareChars(actual: string, expected: string): boolean {
-    // 일반 스페이스와 Non-breaking space를 동일하게 처리
-    if ((actual === ' ' || actual === '\u00A0') && (expected === ' ' || expected === '\u00A0')) {
-      return true
+  // 문자 정규화 - 모든 종류의 스페이스를 일반 스페이스로 변환
+  private normalizeChar(char: string): string {
+    // 다양한 스페이스 문자들을 일반 스페이스로 통일
+    if (char === ' ' || char === '\u00A0' || char === '\u2000' || char === '\u2001' || 
+        char === '\u2002' || char === '\u2003' || char === '\u2004' || char === '\u2005' || 
+        char === '\u2006' || char === '\u2007' || char === '\u2008' || char === '\u2009' || 
+        char === '\u200A' || char === '\u200B' || char === '\u3000') {
+      return ' '
     }
-    // 대소문자 구분하여 정확히 비교
-    return actual === expected
+    return char
+  }
+
+  // 개선된 문자 비교 함수
+  private compareChars(actual: string, expected: string): boolean {
+    const normalizedActual = this.normalizeChar(actual)
+    const normalizedExpected = this.normalizeChar(expected)
+    
+    // 정규화된 문자로 정확한 비교
+    return normalizedActual === normalizedExpected
   }
 
   // Validate user input against target text
@@ -59,8 +70,11 @@ export class TypingEngine {
       errors: []
     }
 
+    // 현재 에러 카운트 초기화
+    let currentErrors = 0
+
     // Check each character with improved logic
-    for (let i = 0; i < userInput.length; i++) {
+    for (let i = 0; i < userInput.length && i < this.targetText.length; i++) {
       const expectedChar = this.targetText[i]
       const actualChar = userInput[i]
       
@@ -68,13 +82,28 @@ export class TypingEngine {
         result.completedChars++
       } else {
         result.isCorrect = false
-        const expectedDisplay = expectedChar === ' ' ? '[SPACE]' : expectedChar
-        const actualDisplay = actualChar === ' ' ? '[SPACE]' : actualChar
+        currentErrors++
+        
+        const expectedDisplay = expectedChar === ' ' ? '[SPACE]' : 
+                               expectedChar === '\n' ? '[ENTER]' : 
+                               expectedChar === '\t' ? '[TAB]' : expectedChar
+        const actualDisplay = actualChar === ' ' ? '[SPACE]' : 
+                              actualChar === '\n' ? '[ENTER]' : 
+                              actualChar === '\t' ? '[TAB]' : actualChar
+        
         result.errors.push(`Position ${i + 1}: expected '${expectedDisplay}', got '${actualDisplay}'`)
       }
     }
 
+    // 입력이 타겟보다 긴 경우 처리
+    if (userInput.length > this.targetText.length) {
+      result.isCorrect = false
+      currentErrors++
+      result.errors.push(`Input too long: expected ${this.targetText.length} characters, got ${userInput.length}`)
+    }
+
     this.currentPosition = userInput.length
+    this.errorCount = currentErrors
     return result
   }
 
@@ -83,7 +112,7 @@ export class TypingEngine {
     const keystroke: KeystrokeEvent = {
       key,
       timestamp: Date.now(),
-      isCorrect: this.compareChars(key, expectedChar), // 개선된 비교 함수 사용
+      isCorrect: this.compareChars(key, expectedChar),
       expectedChar,
       actualChar: key
     }
@@ -121,7 +150,7 @@ export class TypingEngine {
       accuracy,
       correctChars: validation.completedChars,
       totalChars: userInput.length,
-      errors: validation.errors.length, // 실제 에러 개수 반영
+      errors: this.errorCount,
       startTime: this.startTime || currentTime,
       currentTime
     }
@@ -131,12 +160,19 @@ export class TypingEngine {
   isComplete(userInput: string): boolean {
     if (userInput.length < this.targetText.length) return false
     
-    const validation = this.validateInput(userInput)
-    return validation.completedChars === this.targetText.length
+    // 모든 문자가 정확히 일치하는지 확인
+    for (let i = 0; i < this.targetText.length; i++) {
+      if (!this.compareChars(userInput[i] || '', this.targetText[i])) {
+        return false
+      }
+    }
+    
+    return userInput.length === this.targetText.length
   }
 
   // Get completion percentage
   getProgress(userInput: string): number {
+    if (this.targetText.length === 0) return 100
     return Math.min(100, (userInput.length / this.targetText.length) * 100)
   }
 
@@ -148,7 +184,13 @@ export class TypingEngine {
     this.startTime = null
     this.keystrokes = []
     this.currentPosition = 0
-    this.errors = 0
+    this.errorCount = 0
+  }
+
+  // Get next expected character
+  getNextChar(userInput: string): string {
+    if (userInput.length >= this.targetText.length) return ''
+    return this.targetText[userInput.length]
   }
 
   // Get detailed keystroke analysis
@@ -177,7 +219,7 @@ export class TypingEngine {
     }
   }
 
-  // 디버깅용 함수 추가
+  // 디버깅용 함수 - 향상된 정보 제공
   public debugCurrentState(userInput: string): {
     targetLength: number
     inputLength: number
@@ -185,13 +227,17 @@ export class TypingEngine {
     nextExpectedChar: string
     lastInputChar: string
     isMatching: boolean
+    normalizedComparison: {
+      expected: string
+      actual: string
+      matches: boolean
+    }
   } {
-    const nextExpectedChar = userInput.length < this.targetText.length 
-      ? this.targetText[userInput.length] 
-      : ''
-    const lastInputChar = userInput.length > 0 
-      ? userInput[userInput.length - 1] 
-      : ''
+    const nextExpectedChar = this.getNextChar(userInput)
+    const lastInputChar = userInput.length > 0 ? userInput[userInput.length - 1] : ''
+    
+    const normalizedExpected = this.normalizeChar(nextExpectedChar)
+    const normalizedActual = this.normalizeChar(lastInputChar)
     
     return {
       targetLength: this.targetText.length,
@@ -199,7 +245,12 @@ export class TypingEngine {
       currentPosition: this.currentPosition,
       nextExpectedChar: nextExpectedChar === ' ' ? '[SPACE]' : nextExpectedChar,
       lastInputChar: lastInputChar === ' ' ? '[SPACE]' : lastInputChar,
-      isMatching: userInput.length > 0 ? this.compareChars(lastInputChar, this.targetText[userInput.length - 1]) : true
+      isMatching: userInput.length > 0 ? this.compareChars(lastInputChar, this.targetText[userInput.length - 1]) : true,
+      normalizedComparison: {
+        expected: normalizedExpected === ' ' ? '[SPACE]' : normalizedExpected,
+        actual: normalizedActual === ' ' ? '[SPACE]' : normalizedActual,
+        matches: normalizedExpected === normalizedActual
+      }
     }
   }
 }
