@@ -395,6 +395,35 @@ export default function Home() {
             <div className="absolute inset-0 bg-cyan-400 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 opacity-20"></div>
           </div>
 
+          {/* Zero-G Combat - NEW! */}
+          <div 
+            onClick={() => router.push('/zero-g-combat')}
+            className="retro-border p-6 md:p-8 transition-all duration-300 group relative overflow-hidden min-h-[200px] flex flex-col justify-between border-red-500 cursor-pointer hover:bg-red-500 hover:bg-opacity-10"
+          >
+            <div className="relative z-10">
+              <div className="flex items-center mb-2">
+                <h3 className="text-lg md:text-xl text-red-500 group-hover:text-black transition-colors">
+                  [ZERO-G_COMBAT.EXE]
+                </h3>
+                <span className="ml-2 text-xs bg-red-500 text-white px-2 py-1 rounded font-bold animate-pulse">
+                  ALPHA!
+                </span>
+              </div>
+              <p className="text-gray-400 group-hover:text-gray-800 transition-colors mb-6 text-sm md:text-base">
+                > Physics-based space combat simulation
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="retro-button text-xs md:text-sm px-4 md:px-6 py-2 md:py-3">
+                  DEMO_MODE
+                </span>
+                <span className="group-hover:translate-x-2 transition-transform text-lg md:text-xl text-red-500">
+                  🚀
+                </span>
+              </div>
+            </div>
+            <div className="absolute inset-0 bg-red-500 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 opacity-20"></div>
+          </div>
+
           {/* Patch Notes */}
           <div 
             onClick={() => router.push('/patch-notes')}
@@ -480,6 +509,29 @@ export default function Home() {
           </section>
         )}
 
+        {/* New Feature Highlight - Zero-G Combat */}
+        <section className="retro-border p-4 md:p-6 mb-8 border-red-500 bg-red-500 bg-opacity-5">
+          <div className="text-center">
+            <h3 className="text-lg md:text-xl mb-3 text-red-500 retro-glow">
+              🚀 ALPHA RELEASE: ZERO-G SPACE COMBAT
+            </h3>
+            <p className="text-sm md:text-base text-gray-400 mb-4">
+              Experience physics-based combat in zero gravity! Control your spaceship with WASD direction + SPACE thrust mechanics.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
+              <div>&gt; Physics: Real Matter.js simulation</div>
+              <div>&gt; Controls: WASD + SPACE thrust</div>
+              <div>&gt; Mode: Single-player demo</div>
+            </div>
+            <button 
+              onClick={() => router.push('/zero-g-combat')}
+              className="retro-button mt-4 border-red-500 text-red-500 hover:bg-red-500 hover:text-white px-6 py-2"
+            >
+              LAUNCH DEMO →
+            </button>
+          </div>
+        </section>
+
         {/* New Feature Highlight - Hacker Simulator */}
         <section className="retro-border p-4 md:p-6 mb-8 border-cyan-400 bg-cyan-400 bg-opacity-5">
           <div className="text-center">
@@ -533,7 +585,7 @@ export default function Home() {
             <p>&gt; BUILD_STATUS: Deployment successful ✓ | Version: {latestPatch ? latestPatch.version : 'Loading...'}</p>
             <p className="hidden md:block">&gt; USER_STATUS: {authUser ? `Authenticated as ${authUser.displayName}` : 'Guest User'}</p>
             <p className="md:hidden">&gt; USER: {authUser ? authUser.displayName : 'Guest'}</p>
-            <p>&gt; FEATURES: Auth + Chat + Patch Notes + Admin + Voice Chat + Hacker Game | Security: Enhanced</p>
+            <p>&gt; FEATURES: Auth + Chat + Patch Notes + Admin + Voice Chat + Hacker Game + Zero-G Combat | Security: Enhanced</p>
           </div>
         </section>
       </main>
