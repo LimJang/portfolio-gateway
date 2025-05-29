@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 
 // 🔴 기본 물리 객체
@@ -34,8 +34,11 @@ export default function BasicP2PPhysics() {
   const [joinCode, setJoinCode] = useState<string>('');
   const [isConnected, setIsConnected] = useState<boolean>(false);
   
-  // 물리 상태
-  const [physicsState, setPhysicsState] = useState<PhysicsState>({
+  // 로그
+  const [logs, setLogs] = useState<string[]>([]);
+  
+  // 게임 로직 - useRef로 변경하여 실시간 업데이트 보장
+  const physicsStateRef = useRef<PhysicsState>({
     ball: {
       x: 200,
       y: 100,
@@ -47,13 +50,14 @@ export default function BasicP2PPhysics() {
     timestamp: Date.now()
   });
   
-  // 로그
-  const [logs, setLogs] = useState<string[]>([]);
+  // 렌더링용 상태 (화면 업데이트용)
+  const [displayState, setDisplayState] = useState<PhysicsState>(physicsStateRef.current);
   
-  // 게임 로직
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
+  const physicsRef = useRef<number>();
   const lastSyncRef = useRef<number>(0);
+  const isRunningRef = useRef<boolean>(false);
   
   // 물리 상수
   const GRAVITY = 0.5;
@@ -63,11 +67,11 @@ export default function BasicP2PPhysics() {
   const CANVAS_HEIGHT = 400;
 
   // 로그 추가
-  const addLog = (message: string) => {
+  const addLog = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     setLogs(prev => [...prev.slice(-8), `[${timestamp}] ${message}`]);
     console.log(`[P2P PHYSICS] ${message}`);
-  };
+  }, []);
 
   // 🌐 Peer 생성 (모바일 핫스팟 최적화)
   const createPeer = async () => {
@@ -189,7 +193,9 @@ export default function BasicP2PPhysics() {
       
       if (message.type === 'physics_update') {
         // 호스트로부터 물리 상태 받아서 동기화
-        setPhysicsState(message.data);
+        physicsStateRef.current = message.data;
+        setDisplayState(message.data);
+        
         // 로그는 가끔만 표시 (매번 뜨면 너무 많음)
         if (Math.random() < 0.1) { // 10% 확률로만 로그 표시
           addLog(`📊 물리 동기화 X:${Math.round(message.data.ball.x)} Y:${Math.round(message.data.ball.y)}`);
@@ -219,112 +225,120 @@ export default function BasicP2PPhysics() {
   const handleUserInput = (inputData: { action: string }) => {
     if (!isHost) return;
     
-    setPhysicsState(prev => {
-      const newState = { ...prev };
-      
-      switch (inputData.action) {
-        case 'kick_left':
-          newState.ball.vx = -5;
-          newState.ball.vy = -3;
-          addLog('⚽ 공 왼쪽으로 킥!');
-          break;
-        case 'kick_right':
-          newState.ball.vx = 5;
-          newState.ball.vy = -3;
-          addLog('⚽ 공 오른쪽으로 킥!');
-          break;
-        case 'reset':
-          newState.ball = {
-            x: 200,
-            y: 100,
-            vx: 1,      // 초기 속도 설정
-            vy: 0,
-            radius: 20,
-            color: '#ff4444'
-          };
-          addLog('🔄 공 위치 리셋');
-          break;
-      }
-      
-      newState.timestamp = Date.now();
-      return newState;
-    });
-  };
-
-  // 🔄 물리 시뮬레이션 (호스트만)
-  const updatePhysics = () => {
-    if (!isHost) return;
+    const currentState = physicsStateRef.current;
     
-    setPhysicsState(prev => {
-      const newState = { ...prev };
-      const ball = newState.ball;
-      
-      // 중력 적용
-      ball.vy += GRAVITY;
-      
-      // 위치 업데이트
-      ball.x += ball.vx;
-      ball.y += ball.vy;
-      
-      // 좌우 벽 충돌
-      if (ball.x <= ball.radius || ball.x >= CANVAS_WIDTH - ball.radius) {
-        ball.vx *= -BOUNCE_DAMPING;
-        ball.x = ball.x <= ball.radius ? ball.radius : CANVAS_WIDTH - ball.radius;
-      }
-      
-      // 바닥 충돌
-      if (ball.y >= GROUND_Y - ball.radius) {
-        ball.y = GROUND_Y - ball.radius;
-        ball.vy *= -BOUNCE_DAMPING;
-        
-        // 작은 진동 제거
-        if (Math.abs(ball.vy) < 1) {
-          ball.vy = 0;
-        }
-      }
-      
-      // 천장 충돌
-      if (ball.y <= ball.radius) {
-        ball.y = ball.radius;
-        ball.vy *= -BOUNCE_DAMPING;
-      }
-      
-      newState.timestamp = Date.now();
-      return newState;
-    });
-  };
-
-  // 🔄 물리 루프 시작 (호스트만)
-  const startPhysicsLoop = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
+    switch (inputData.action) {
+      case 'kick_left':
+        currentState.ball.vx = -5;
+        currentState.ball.vy = -3;
+        addLog('⚽ 공 왼쪽으로 킥!');
+        break;
+      case 'kick_right':
+        currentState.ball.vx = 5;
+        currentState.ball.vy = -3;
+        addLog('⚽ 공 오른쪽으로 킥!');
+        break;
+      case 'reset':
+        currentState.ball = {
+          x: 200,
+          y: 100,
+          vx: 1,      // 초기 속도 설정
+          vy: 0,
+          radius: 20,
+          color: '#ff4444'
+        };
+        addLog('🔄 공 위치 리셋');
+        break;
     }
     
+    currentState.timestamp = Date.now();
+    setDisplayState({...currentState});
+  };
+
+  // 🔄 물리 시뮬레이션 (호스트만) - 개선된 버전
+  const updatePhysics = useCallback(() => {
+    if (!isHost) return;
+    
+    const state = physicsStateRef.current;
+    const ball = state.ball;
+    
+    // 중력 적용
+    ball.vy += GRAVITY;
+    
+    // 위치 업데이트
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+    
+    // 좌우 벽 충돌
+    if (ball.x <= ball.radius || ball.x >= CANVAS_WIDTH - ball.radius) {
+      ball.vx *= -BOUNCE_DAMPING;
+      ball.x = ball.x <= ball.radius ? ball.radius : CANVAS_WIDTH - ball.radius;
+    }
+    
+    // 바닥 충돌
+    if (ball.y >= GROUND_Y - ball.radius) {
+      ball.y = GROUND_Y - ball.radius;
+      ball.vy *= -BOUNCE_DAMPING;
+      
+      // 작은 진동 제거
+      if (Math.abs(ball.vy) < 1) {
+        ball.vy = 0;
+      }
+    }
+    
+    // 천장 충돌
+    if (ball.y <= ball.radius) {
+      ball.y = ball.radius;
+      ball.vy *= -BOUNCE_DAMPING;
+    }
+    
+    state.timestamp = Date.now();
+    
+    // 화면 업데이트
+    setDisplayState({...state});
+    
+    // 클라이언트에게 물리 상태 전송 (30fps = 33ms)
+    if (connection && connection.open && Date.now() - lastSyncRef.current > 33) {
+      sendMessage(connection, {
+        type: 'physics_update',
+        data: {...state},
+        timestamp: Date.now()
+      });
+      lastSyncRef.current = Date.now();
+    }
+  }, [isHost, connection, addLog, sendMessage]);
+
+  // 🔄 물리 루프 시작 (호스트만) - 개선된 버전
+  const startPhysicsLoop = useCallback(() => {
+    if (isRunningRef.current) {
+      addLog('⚠️ 물리 루프가 이미 실행 중입니다.');
+      return;
+    }
+    
+    isRunningRef.current = true;
     addLog('🔄 물리 시뮬레이션 시작');
     
     const physicsLoop = () => {
-      if (isHost) {
-        updatePhysics();
-        
-        // 클라이언트에게 물리 상태 전송 (30fps)
-        if (connection && connection.open && Date.now() - lastSyncRef.current > 33) {
-          sendMessage(connection, {
-            type: 'physics_update',
-            data: physicsState,
-            timestamp: Date.now()
-          });
-          lastSyncRef.current = Date.now();
-        }
-      }
+      if (!isRunningRef.current) return;
       
-      animationRef.current = requestAnimationFrame(physicsLoop);
+      updatePhysics();
+      physicsRef.current = requestAnimationFrame(physicsLoop);
     };
     
     physicsLoop();
-  };
+  }, [updatePhysics, addLog]);
+
+  // 물리 루프 중지
+  const stopPhysicsLoop = useCallback(() => {
+    isRunningRef.current = false;
+    if (physicsRef.current) {
+      cancelAnimationFrame(physicsRef.current);
+    }
+    addLog('🛑 물리 시뮬레이션 중지');
+  }, [addLog]);
 
   // 🎨 렌더링
-  const renderCanvas = () => {
+  const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -341,7 +355,7 @@ export default function BasicP2PPhysics() {
     ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT - GROUND_Y);
     
     // 공
-    const ball = physicsState.ball;
+    const ball = displayState.ball;
     ctx.fillStyle = ball.color;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
@@ -353,32 +367,37 @@ export default function BasicP2PPhysics() {
     ctx.textAlign = 'left';
     ctx.fillText(`Role: ${isHost ? 'HOST' : 'CLIENT'}`, 10, 20);
     ctx.fillText(`Connected: ${isConnected ? 'YES' : 'NO'}`, 10, 35);
-    ctx.fillText(`X: ${Math.round(ball.x)}, Y: ${Math.round(ball.y)}`, 10, 50);
-    ctx.fillText(`VX: ${ball.vx.toFixed(1)}, VY: ${ball.vy.toFixed(1)}`, 10, 65);
-  };
+    ctx.fillText(`Running: ${isRunningRef.current ? 'YES' : 'NO'}`, 10, 50);
+    ctx.fillText(`X: ${Math.round(ball.x)}, Y: ${Math.round(ball.y)}`, 10, 65);
+    ctx.fillText(`VX: ${ball.vx.toFixed(1)}, VY: ${ball.vy.toFixed(1)}`, 10, 80);
+  }, [displayState, isHost, isConnected]);
 
   // 🎨 렌더링 루프
   useEffect(() => {
     const renderLoop = () => {
       renderCanvas();
-      requestAnimationFrame(renderLoop);
+      animationRef.current = requestAnimationFrame(renderLoop);
     };
     renderLoop();
-  }, [physicsState, isHost, isConnected]);
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [renderCanvas]);
 
   // 🚀 초기화
   useEffect(() => {
     createPeer();
     
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      stopPhysicsLoop();
       if (peer) {
         peer.destroy();
       }
     };
-  }, []);
+  }, [stopPhysicsLoop]);
 
   return (
     <div className="min-h-screen bg-black text-green-500 font-mono p-4">
@@ -431,6 +450,24 @@ export default function BasicP2PPhysics() {
                 <div className="text-sm">호스트 코드:</div>
                 <div className="text-yellow-400 font-bold text-lg">{roomCode}</div>
                 <div className="text-xs text-gray-400 mt-1">클라이언트가 이 코드로 접속</div>
+                
+                {/* 호스트 컨트롤 */}
+                <div className="mt-3 space-x-2">
+                  <button
+                    onClick={startPhysicsLoop}
+                    disabled={isRunningRef.current}
+                    className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded text-xs text-white"
+                  >
+                    ▶️ 시작
+                  </button>
+                  <button
+                    onClick={stopPhysicsLoop}
+                    disabled={!isRunningRef.current}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded text-xs text-white"
+                  >
+                    ⏸️ 정지
+                  </button>
+                </div>
               </div>
             )}
             
@@ -522,6 +559,10 @@ export default function BasicP2PPhysics() {
           
           <div className="mt-2 text-sm text-gray-400">
             💡 호스트: 물리 계산 담당 | 클라이언트: 결과 동기화 확인
+          </div>
+          
+          <div className="mt-1 text-xs text-yellow-400">
+            🔧 호스트는 "▶️ 시작" 버튼으로 물리 엔진을 수동 시작할 수 있습니다
           </div>
         </div>
       </div>
