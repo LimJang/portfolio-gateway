@@ -71,6 +71,9 @@ export default function BounceBattlePage() {
   const [playerName, setPlayerName] = useState<string>('Player');
   const [logs, setLogs] = useState<string[]>([]);
   
+  // 🔧 강제 리렌더링을 위한 상태
+  const [forceUpdate, setForceUpdate] = useState<number>(0);
+  
   // 게임 로직
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
@@ -308,10 +311,11 @@ export default function BounceBattlePage() {
     }
   };
 
-  // 👤 플레이어 참가 처리 (Host만) - 개선된 버전
+  // 👤 플레이어 참가 처리 (Host만) - 🔧 동기화 문제 해결
   const handlePlayerJoin = (playerData: any, conn: DataConnection) => {
     addLog(`🔄 플레이어 추가 처리 시작: ${playerData.name} (${playerData.id})`);
     
+    // 🔧 즉시 실행 가능한 로직으로 변경
     setGameState(prevState => {
       // 이미 존재하는 플레이어인지 확인
       const existingPlayer = prevState.players.find(p => p.id === playerData.id);
@@ -350,9 +354,17 @@ export default function BounceBattlePage() {
         players: [...prevState.players, newPlayer]
       };
       
-      addLog(`✅ 플레이어 추가 완료: ${playerData.name} (총 ${newState.players.length}명)`);
+      // 🔧 즉시 로그 및 강제 업데이트
+      const playerCount = newState.players.length;
+      addLog(`✅ 플레이어 추가 완료: ${playerData.name} (총 ${playerCount}명)`);
       
-      // 🔧 새 플레이어에게 게임 상태 전송 (더 확실하게)
+      // 🔧 강제 리렌더링 트리거
+      setTimeout(() => {
+        setForceUpdate(prev => prev + 1);
+        addLog(`🔄 UI 강제 업데이트 (총 플레이어: ${playerCount}명)`);
+      }, 10);
+      
+      // 🔧 새 플레이어에게 게임 상태 전송
       setTimeout(() => {
         if (conn && conn.open) {
           sendMessage(conn, {
@@ -360,7 +372,7 @@ export default function BounceBattlePage() {
             data: newState,
             timestamp: Date.now()
           });
-          addLog(`📤 게임 상태 전송 완료: ${playerData.name}`);
+          addLog(`📤 게임 상태 전송 완료: ${playerData.name} (${playerCount}명)`);
         } else {
           addLog(`❌ 연결이 닫혀있어 게임 상태 전송 실패: ${playerData.name}`);
         }
@@ -397,7 +409,7 @@ export default function BounceBattlePage() {
         addLog(`⚠️ 연결이 열려있지 않음: ${conn?.peer || 'unknown'} (상태: ${conn?.open})`);
       }
     } catch (error) {
-      addLog(`❌ 메시지 전송 실패: ${error}`);
+      addLog(`❌메시지 전송 실패: ${error}`);
     }
   };
 
@@ -663,21 +675,22 @@ export default function BounceBattlePage() {
     };
   }, []);
 
-  // 🔧 디버깅 정보 표시
+  // 🔧 디버깅 정보 표시 - forceUpdate 반영
   const debugInfo = {
     myPeerId,
     isHost,
     connectionsCount: connections.length,
     playersCount: gameState.players.length,
     gameStarted: gameState.gameStarted,
-    gamePhase
+    gamePhase,
+    forceUpdate // 강제 업데이트 카운터 추가
   };
 
   return (
     <div className="min-h-screen bg-black text-green-500 font-mono p-4">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-8 text-green-400">
-          🏆 BOUNCE BATTLE - 실시간 P2P 배틀 v2.1
+          🏆 BOUNCE BATTLE - 실시간 P2P 배틀 v2.2
         </h1>
         
         {/* 🔧 디버깅 정보 */}
@@ -685,7 +698,8 @@ export default function BounceBattlePage() {
           <div className="text-yellow-400 mb-1">🔧 DEBUG INFO:</div>
           <div>ID: {debugInfo.myPeerId} | Host: {debugInfo.isHost ? 'YES' : 'NO'} | 
                Connections: {debugInfo.connectionsCount} | Players: {debugInfo.playersCount} | 
-               Phase: {debugInfo.gamePhase} | Started: {debugInfo.gameStarted ? 'YES' : 'NO'}</div>
+               Phase: {debugInfo.gamePhase} | Started: {debugInfo.gameStarted ? 'YES' : 'NO'} | 
+               Updates: {debugInfo.forceUpdate}</div>
         </div>
         
         {gamePhase === 'menu' && (
