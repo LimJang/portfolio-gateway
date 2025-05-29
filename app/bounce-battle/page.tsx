@@ -277,28 +277,39 @@ export default function BounceBattlePage() {
     });
   };
 
-  // 📨 네트워크 메시지 처리 - 🔧 Stale Closure 문제 해결
+  // 📨 네트워크 메시지 처리 - 🔧 수정된 버전
   const handleNetworkMessage = (message: NetworkMessage, conn: DataConnection) => {
     addLog(`🔍 메시지 처리: ${message.type} | 현재 isHost: ${isHost}`);
     
     switch (message.type) {
       case 'player_join':
-        addLog(`🔍 player_join 수신 | isHost: ${isHost}`);
-        // 🔧 조건 체크 제거하고 항상 처리 (호스트만 이 메시지를 받을 것이므로)
-        addLog(`👤 플레이어 참가 요청: ${message.data.name} (${message.data.id})`);
-        try {
-          handlePlayerJoin(message.data, conn);
-          addLog(`✅ handlePlayerJoin 성공 완료`);
-        } catch (error) {
-          addLog(`❌ handlePlayerJoin 오류: ${error}`);
-          console.error('[BOUNCE] handlePlayerJoin error:', error);
+        // 🔧 호스트만 처리하도록 명확히 체크
+        if (isHost) {
+          addLog(`👤 플레이어 참가 요청: ${message.data.name} (${message.data.id})`);
+          try {
+            handlePlayerJoin(message.data, conn);
+            addLog(`✅ handlePlayerJoin 성공 완료`);
+          } catch (error) {
+            addLog(`❌ handlePlayerJoin 오류: ${error}`);
+            console.error('[BOUNCE] handlePlayerJoin error:', error);
+          }
+        } else {
+          addLog(`⚠️ 클라이언트가 player_join 메시지를 받음 (무시)`);
         }
         break;
         
       case 'game_state':
+        // 🔧 클라이언트만 게임 상태 업데이트 받음
         if (!isHost) {
           addLog(`📊 게임 상태 업데이트 받음 (플레이어 ${message.data.players.length}명)`);
           setGameState(message.data);
+          
+          // 🔧 게임이 시작되었다면 playing 상태로 변경하고 렌더링 시작
+          if (message.data.gameStarted && gamePhase !== 'playing') {
+            addLog(`🎮 게임 상태 변경: lobby → playing`);
+            setGamePhase('playing');
+            startClientRenderLoop();
+          }
         }
         break;
         
@@ -309,8 +320,18 @@ export default function BounceBattlePage() {
         break;
         
       case 'game_start':
+        addLog(`🎮 게임 시작 메시지 수신!`);
+        
+        // 🔧 호스트와 클라이언트 모두 게임 시작 상태로 변경
         setGameState(prev => ({ ...prev, gameStarted: true }));
-        startGameLoop();
+        setGamePhase('playing');
+        
+        // 🔧 호스트는 게임 루프 시작, 클라이언트는 렌더링만
+        if (isHost) {
+          startGameLoop();
+        } else {
+          startClientRenderLoop();
+        }
         break;
         
       case 'connection_ack':
@@ -336,83 +357,84 @@ export default function BounceBattlePage() {
       setGameState(prevState => {
         addLog(`🔍 [STEP 3] setGameState 콜백 진입 | prevState.players: ${prevState.players.length}`);
         console.log('[BOUNCE DEBUG] prevState:', prevState);
-      // 이미 존재하는 플레이어인지 확인
-      const existingPlayer = prevState.players.find(p => p.id === playerData.id);
-      if (existingPlayer) {
-        addLog(`⚠️ 이미 존재하는 플레이어: ${playerData.name}`);
         
-        // 그래도 현재 게임 상태를 전송
-        setTimeout(() => {
-          sendMessage(conn, {
-            type: 'game_state',
-            data: prevState,
-            timestamp: Date.now()
-          });
-          addLog(`📤 기존 플레이어에게 게임 상태 재전송: ${playerData.name}`);
-        }, 100);
-        
-        return prevState;
-      }
-      
-      addLog(`🔍 [STEP 4B] 새 플레이어 생성 시작...`);
-      
-      // 새 플레이어 생성
-      const newPlayer: Player = {
-        id: playerData.id,
-        name: playerData.name,
-        x: 100 + Math.random() * 600,
-        y: 100,
-        vx: 0,
-        vy: 0,
-        radius: 20,
-        color: PLAYER_COLORS[prevState.players.length % PLAYER_COLORS.length],
-        isHost: false,
-        alive: true
-      };
-      
-      const newState = {
-        ...prevState,
-        players: [...prevState.players, newPlayer]
-      };
-      
-      // 🔧 즉시 로그 및 강제 업데이트
-      const playerCount = newState.players.length;
-      addLog(`✅ [STEP 5] 플레이어 추가 완료: ${playerData.name} (총 ${playerCount}명)`);
-      console.log('[BOUNCE DEBUG] New state created:', newState);
-      
-      // 🔧 강제 리렌더링 트리거
-      setTimeout(() => {
-        setForceUpdate(prev => {
-          const newCount = prev + 1;
-          addLog(`🔄 [STEP 6] UI 강제 업데이트 (총 플레이어: ${playerCount}명, Update: ${newCount})`);
-          return newCount;
-        });
-      }, 10);
-      
-      // 🔧 새 플레이어에게 게임 상태 전송
-      setTimeout(() => {
-        if (conn && conn.open) {
-          sendMessage(conn, {
-            type: 'game_state',
-            data: newState,
-            timestamp: Date.now()
-          });
-          addLog(`📤 [STEP 7] 게임 상태 전송 완료: ${playerData.name} (${playerCount}명)`);
-        } else {
-          addLog(`❌ [STEP 7] 연결이 닫혀있어 게임 상태 전송 실패: ${playerData.name}`);
+        // 이미 존재하는 플레이어인지 확인
+        const existingPlayer = prevState.players.find(p => p.id === playerData.id);
+        if (existingPlayer) {
+          addLog(`⚠️ 이미 존재하는 플레이어: ${playerData.name}`);
+          
+          // 그래도 현재 게임 상태를 전송
+          setTimeout(() => {
+            sendMessage(conn, {
+              type: 'game_state',
+              data: prevState,
+              timestamp: Date.now()
+            });
+            addLog(`📤 기존 플레이어에게 게임 상태 재전송: ${playerData.name}`);
+          }, 100);
+          
+          return prevState;
         }
-      }, 150);
+        
+        addLog(`🔍 [STEP 4B] 새 플레이어 생성 시작...`);
+        
+        // 새 플레이어 생성
+        const newPlayer: Player = {
+          id: playerData.id,
+          name: playerData.name,
+          x: 100 + Math.random() * 600,
+          y: 100,
+          vx: 0,
+          vy: 0,
+          radius: 20,
+          color: PLAYER_COLORS[prevState.players.length % PLAYER_COLORS.length],
+          isHost: false,
+          alive: true
+        };
+        
+        const newState = {
+          ...prevState,
+          players: [...prevState.players, newPlayer]
+        };
+        
+        // 🔧 즉시 로그 및 강제 업데이트
+        const playerCount = newState.players.length;
+        addLog(`✅ [STEP 5] 플레이어 추가 완료: ${playerData.name} (총 ${playerCount}명)`);
+        console.log('[BOUNCE DEBUG] New state created:', newState);
+        
+        // 🔧 강제 리렌더링 트리거
+        setTimeout(() => {
+          setForceUpdate(prev => {
+            const newCount = prev + 1;
+            addLog(`🔄 [STEP 6] UI 강제 업데이트 (총 플레이어: ${playerCount}명, Update: ${newCount})`);
+            return newCount;
+          });
+        }, 10);
+        
+        // 🔧 새 플레이어에게 게임 상태 전송
+        setTimeout(() => {
+          if (conn && conn.open) {
+            sendMessage(conn, {
+              type: 'game_state',
+              data: newState,
+              timestamp: Date.now()
+            });
+            addLog(`📤 [STEP 7] 게임 상태 전송 완료: ${playerData.name} (${playerCount}명)`);
+          } else {
+            addLog(`❌ [STEP 7] 연결이 닫혀있어 게임 상태 전송 실패: ${playerData.name}`);
+          }
+        }, 150);
+        
+        addLog(`🔍 [STEP 8] newState 리턴: players=${newState.players.length}`);
+        return newState;
+      });
       
-      addLog(`🔍 [STEP 8] newState 리턴: players=${newState.players.length}`);
-      return newState;
-    });
-    
-    addLog(`🔍 [STEP 9] setGameState 호출 완료`);
-    
-  } catch (error) {
-    addLog(`❌ [ERROR] handlePlayerJoin 실행 중 오류: ${error}`);
-    console.error('[BOUNCE ERROR]', error);
-  }
+      addLog(`🔍 [STEP 9] setGameState 호출 완료`);
+      
+    } catch (error) {
+      addLog(`❌ [ERROR] handlePlayerJoin 실행 중 오류: ${error}`);
+      console.error('[BOUNCE ERROR]', error);
+    }
   };
 
   // 🎮 플레이어 입력 처리 (Host만)
@@ -476,6 +498,7 @@ export default function BounceBattlePage() {
     addLog(`🚀 게임 시작 시도... (플레이어 ${gameState.players.length}명)`);
     
     setGameState(prev => ({ ...prev, gameStarted: true }));
+    setGamePhase('playing');
     
     // 게임 시작 메시지 브로드캐스트
     const message: NetworkMessage = {
@@ -494,11 +517,13 @@ export default function BounceBattlePage() {
     addLog('🎮 게임 시작!');
   };
 
-  // 🔄 게임 루프
+  // 🔄 게임 루프 (호스트용 - 게임 로직 + 렌더링)
   const startGameLoop = () => {
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
+    
+    addLog('🔄 호스트 게임 루프 시작');
     
     const gameLoop = () => {
       updateGame();
@@ -514,6 +539,22 @@ export default function BounceBattlePage() {
     };
     
     gameLoop();
+  };
+
+  // 🎨 클라이언트 렌더링 루프 (렌더링만)
+  const startClientRenderLoop = () => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    
+    addLog('🎨 클라이언트 렌더링 루프 시작');
+    
+    const renderLoop = () => {
+      renderGame();
+      animationRef.current = requestAnimationFrame(renderLoop);
+    };
+    
+    renderLoop();
   };
 
   // 🔄 게임 업데이트 (Host만 실행)
@@ -644,6 +685,13 @@ export default function BounceBattlePage() {
     ctx.textAlign = 'left';
     ctx.fillText(`Players: ${gameState.players.filter(p => p.alive).length}/${gameState.players.length}`, 10, 30);
     
+    // 🔧 클라이언트 표시 추가
+    if (!isHost) {
+      ctx.fillText('CLIENT', 10, 50);
+    } else {
+      ctx.fillText('HOST', 10, 50);
+    }
+    
     if (gameState.winner) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -661,7 +709,7 @@ export default function BounceBattlePage() {
       keysRef.current[e.code] = true;
       
       // 클라이언트인 경우 입력을 호스트에게 전송
-      if (!isHost && connections.length > 0) {
+      if (!isHost && connections.length > 0 && gameState.gameStarted) {
         const inputData = {
           playerId: myPeerId,
           left: keysRef.current['ArrowLeft'] || keysRef.current['KeyA'],
@@ -692,7 +740,7 @@ export default function BounceBattlePage() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isHost, connections, myPeerId]);
+  }, [isHost, connections, myPeerId, gameState.gameStarted]);
 
   // 🚀 초기화
   useEffect(() => {
@@ -723,7 +771,7 @@ export default function BounceBattlePage() {
     <div className="min-h-screen bg-black text-green-500 font-mono p-4">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-8 text-green-400">
-          🏆 BOUNCE BATTLE - 실시간 P2P 배틀 v2.2
+          🏆 BOUNCE BATTLE - 실시간 P2P 배틀 v2.3
         </h1>
         
         {/* 🔧 디버깅 정보 */}
@@ -838,7 +886,7 @@ export default function BounceBattlePage() {
           </div>
         )}
         
-        {gamePhase === 'lobby' && gameState.gameStarted && (
+        {gamePhase === 'playing' && (
           <div className="mt-6">
             <canvas
               ref={canvasRef}
