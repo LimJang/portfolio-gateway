@@ -111,10 +111,10 @@ export default function BounceBattlePage() {
       });
 
       newPeer.on('connection', (conn) => {
-        if (isHost) {
-          addLog(`📞 새 플레이어 연결: ${conn.peer}`);
-          setupConnection(conn);
-        }
+        addLog(`📞 새 플레이어 연결 시도: ${conn.peer}`);
+        
+        // 🔧 즉시 연결 설정
+        setupConnectionForHost(conn);
       });
 
       newPeer.on('error', (error) => {
@@ -168,17 +168,20 @@ export default function BounceBattlePage() {
       conn.on('open', () => {
         addLog('✅ 방 연결 성공!');
         setGamePhase('lobby');
-        setupConnection(conn);
+        setupConnectionForClient(conn);
         
-        // 참가 메시지 전송
-        sendMessage(conn, {
-          type: 'player_join',
-          data: {
-            id: myPeerId,
-            name: playerName
-          },
-          timestamp: Date.now()
-        });
+        // 🔧 연결 완료 후 약간 대기한 다음 참가 메시지 전송
+        setTimeout(() => {
+          sendMessage(conn, {
+            type: 'player_join',
+            data: {
+              id: myPeerId,
+              name: playerName
+            },
+            timestamp: Date.now()
+          });
+          addLog('📤 참가 메시지 전송됨');
+        }, 100);
       });
 
       conn.on('error', (error) => {
@@ -190,17 +193,53 @@ export default function BounceBattlePage() {
     }
   };
 
-  // 🔌 연결 설정
-  const setupConnection = (conn: DataConnection) => {
+  // 🔌 호스트용 연결 설정
+  const setupConnectionForHost = (conn: DataConnection) => {
+    addLog(`🔧 호스트: ${conn.peer} 연결 설정 중...`);
+    
     setConnections(prev => [...prev, conn]);
     
-    conn.on('data', (data: unknown) => {
-      handleNetworkMessage(data as NetworkMessage, conn);
+    conn.on('open', () => {
+      addLog(`✅ 호스트: ${conn.peer} 연결 완료`);
+    });
+    
+    conn.on('data', (data: NetworkMessage) => {
+      addLog(`📨 호스트: ${conn.peer}에서 메시지 받음 (${data.type})`);
+      handleNetworkMessage(data, conn);
     });
 
     conn.on('close', () => {
       setConnections(prev => prev.filter(c => c !== conn));
       addLog(`🔴 플레이어 연결 끊김: ${conn.peer}`);
+      
+      // 플레이어 목록에서도 제거
+      setGameState(prev => ({
+        ...prev,
+        players: prev.players.filter(p => p.id !== conn.peer)
+      }));
+    });
+
+    conn.on('error', (error) => {
+      addLog(`❌ 호스트 연결 오류: ${error}`);
+    });
+  };
+
+  // 🔌 클라이언트용 연결 설정  
+  const setupConnectionForClient = (conn: DataConnection) => {
+    setConnections([conn]);
+    
+    conn.on('data', (data: NetworkMessage) => {
+      handleNetworkMessage(data, conn);
+    });
+
+    conn.on('close', () => {
+      setConnections([]);
+      addLog(`🔴 호스트 연결 끊김`);
+      setGamePhase('menu');
+    });
+
+    conn.on('error', (error) => {
+      addLog(`❌ 클라이언트 연결 오류: ${error}`);
     });
   };
 
@@ -209,6 +248,7 @@ export default function BounceBattlePage() {
     switch (message.type) {
       case 'player_join':
         if (isHost) {
+          addLog(`👤 플레이어 참가 요청: ${message.data.name} (${message.data.id})`);
           handlePlayerJoin(message.data, conn);
         }
         break;
@@ -234,31 +274,47 @@ export default function BounceBattlePage() {
 
   // 👤 플레이어 참가 처리 (Host만)
   const handlePlayerJoin = (playerData: any, conn: DataConnection) => {
-    const newPlayer: Player = {
-      id: playerData.id,
-      name: playerData.name,
-      x: 100 + Math.random() * 600,
-      y: 100,
-      vx: 0,
-      vy: 0,
-      radius: 20,
-      color: PLAYER_COLORS[gameState.players.length % PLAYER_COLORS.length],
-      isHost: false,
-      alive: true
-    };
+    addLog(`🔄 플레이어 추가 처리 중: ${playerData.name}`);
     
-    setGameState(prev => ({
-      ...prev,
-      players: [...prev.players, newPlayer]
-    }));
-    
-    addLog(`👤 플레이어 참가: ${playerData.name}`);
-    
-    // 현재 게임 상태를 새 플레이어에게 전송
-    sendMessage(conn, {
-      type: 'game_state',
-      data: gameState,
-      timestamp: Date.now()
+    // 이미 존재하는 플레이어인지 확인
+    setGameState(prev => {
+      const existingPlayer = prev.players.find(p => p.id === playerData.id);
+      if (existingPlayer) {
+        addLog(`⚠️ 이�� 존재하는 플레이어: ${playerData.name}`);
+        return prev;
+      }
+      
+      const newPlayer: Player = {
+        id: playerData.id,
+        name: playerData.name,
+        x: 100 + Math.random() * 600,
+        y: 100,
+        vx: 0,
+        vy: 0,
+        radius: 20,
+        color: PLAYER_COLORS[prev.players.length % PLAYER_COLORS.length],
+        isHost: false,
+        alive: true
+      };
+      
+      const newState = {
+        ...prev,
+        players: [...prev.players, newPlayer]
+      };
+      
+      addLog(`✅ 플레이어 추가 완료: ${playerData.name} (총 ${newState.players.length}명)`);
+      
+      // 새 플레이어에게 현재 게임 상태 전송
+      setTimeout(() => {
+        sendMessage(conn, {
+          type: 'game_state',
+          data: newState,
+          timestamp: Date.now()
+        });
+        addLog(`📤 게임 상태 전송: ${playerData.name}`);
+      }, 50);
+      
+      return newState;
     });
   };
 
@@ -282,9 +338,13 @@ export default function BounceBattlePage() {
   // 📤 메시지 전송
   const sendMessage = (conn: DataConnection, message: NetworkMessage) => {
     try {
-      conn.send(message);
+      if (conn.open) {
+        conn.send(message);
+      } else {
+        addLog(`⚠️ 연결이 열려있지 않음: ${conn.peer}`);
+      }
     } catch (error) {
-      console.error('메시지 전송 실패:', error);
+      addLog(`❌ 메시지 전송 실패: ${error}`);
     }
   };
 
@@ -546,7 +606,7 @@ export default function BounceBattlePage() {
     <div className="min-h-screen bg-black text-green-500 font-mono p-4">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-8 text-green-400">
-          🏆 BOUNCE BATTLE - 실시간 P2P 배틀
+          🏆 BOUNCE BATTLE - 실시간 P2P 배틀 v2
         </h1>
         
         {gamePhase === 'menu' && (
@@ -610,7 +670,7 @@ export default function BounceBattlePage() {
               )}
               
               <div className="mb-4">
-                <h3 className="font-bold mb-2">👥 플레이어 목록:</h3>
+                <h3 className="font-bold mb-2">👥 플레이어 목록 ({gameState.players.length}):</h3>
                 {gameState.players.map(player => (
                   <div key={player.id} className="flex items-center gap-2 mb-1">
                     <div
