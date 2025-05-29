@@ -9,6 +9,34 @@ interface ConnectionLog {
   message: string;
 }
 
+// 🔥 다중 PeerJS 서버 전략
+const PEER_SERVERS = [
+  {
+    name: 'PeerJS 공식',
+    config: {
+      host: 'peerjs-server.herokuapp.com',
+      port: 443,
+      path: '/',
+      secure: true
+    }
+  },
+  {
+    name: 'PeerJS 기본',
+    config: {
+      // 기본 PeerJS 서버 사용
+    }
+  },
+  {
+    name: 'Peer.land',
+    config: {
+      host: 'peerjs.peer.land',
+      port: 443,
+      path: '/',
+      secure: true
+    }
+  }
+];
+
 export default function P2PNATTestPage() {
   const [myPeerId, setMyPeerId] = useState<string>('');
   const [targetPeerId, setTargetPeerId] = useState<string>('');
@@ -21,6 +49,8 @@ export default function P2PNATTestPage() {
   const [messages, setMessages] = useState<string[]>([]);
   const [currentAttempt, setCurrentAttempt] = useState<number>(0);
   const [maxAttempts] = useState<number>(3);
+  const [currentServerIndex, setCurrentServerIndex] = useState<number>(0);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
 
   const addLog = (status: 'info' | 'success' | 'error' | 'warning', message: string) => {
     const log: ConnectionLog = {
@@ -119,71 +149,99 @@ export default function P2PNATTestPage() {
     }
   };
 
-  // Peer 생성 (NAT 통과 최적화)
+  // 🔥 개선된 Peer 생성 (다중 서버 전략)
+  const createPeerWithServer = async (serverIndex: number): Promise<Peer | null> => {
+    const server = PEER_SERVERS[serverIndex];
+    const newPeerId = 'NAT_' + Math.random().toString(36).substr(2, 8).toUpperCase();
+    
+    return new Promise((resolve) => {
+      addLog('info', `🌐 ${server.name} 서버로 Peer 생성 시도: ${newPeerId}`);
+      
+      const peerConfig = {
+        ...server.config,
+        config: {
+          iceServers: getICEServers(),
+          iceCandidatePoolSize: 15,
+          iceTransportPolicy: 'all' as const,
+          bundlePolicy: 'max-bundle' as const,
+          rtcpMuxPolicy: 'require' as const
+        },
+        debug: 1 // 디버그 레벨 낮춤
+      };
+
+      const newPeer = new Peer(newPeerId, peerConfig);
+      
+      // 성공 타이머 - 5초 내 연결되지 않으면 실패로 간주
+      const successTimer = setTimeout(() => {
+        addLog('error', `${server.name} 서버 연결 타임아웃 (5초)`);
+        newPeer.destroy();
+        resolve(null);
+      }, 5000);
+
+      newPeer.on('open', (id) => {
+        clearTimeout(successTimer);
+        addLog('success', `✅ ${server.name} 서버 연결 성공: ${id}`);
+        resolve(newPeer);
+      });
+
+      newPeer.on('error', (error) => {
+        clearTimeout(successTimer);
+        addLog('error', `❌ ${server.name} 오류: ${error.type} - ${error.message}`);
+        newPeer.destroy();
+        resolve(null);
+      });
+
+      newPeer.on('disconnected', () => {
+        addLog('warning', `⚠️ ${server.name} 서버 연결 끊김`);
+        // 재연결 시도하지 않고 다른 서버로 전환
+      });
+    });
+  };
+
+  // Peer 생성 (서버 순차 시도)
   const createPeer = async () => {
     if (peer) {
       peer.destroy();
     }
 
-    const newPeerId = 'NAT_' + Math.random().toString(36).substr(2, 8).toUpperCase();
+    if (isConnecting) return;
+    setIsConnecting(true);
+    setConnectionStatus('서버 연결 시도 중...');
     
-    try {
-      addLog('info', `🌐 Peer 생성 시도: ${newPeerId}`);
-      setConnectionStatus('Peer 생성 중...');
+    // 모든 서버를 순차적으로 시도
+    for (let i = 0; i < PEER_SERVERS.length; i++) {
+      const serverIndex = (currentServerIndex + i) % PEER_SERVERS.length;
       
-      const newPeer = new Peer(newPeerId, {
-        host: 'peerjs-server.herokuapp.com',
-        port: 443,
-        path: '/',
-        secure: true,
-        config: {
-          iceServers: getICEServers(),
-          // NAT 통과 최적화 설정
-          iceCandidatePoolSize: 15,  // 더 많은 연결 경로
-          iceTransportPolicy: 'all', // 모든 프로토콜 시도
-          bundlePolicy: 'max-bundle',
-          rtcpMuxPolicy: 'require'
-        },
-        debug: 2 // PeerJS 디버그 로그
-      });
-
-      newPeer.on('open', (id) => {
-        setMyPeerId(id);
-        setConnectionStatus('연결 준비 완료');
-        addLog('success', `✅ Peer 생성 성공: ${id}`);
-        addLog('info', `📋 위 ID를 복사해서 다른 기기에서 연결하세요`);
+      try {
+        const newPeer = await createPeerWithServer(serverIndex);
         
-        // NAT 타입 탐지 시작
-        detectNAT();
-      });
+        if (newPeer) {
+          // 성공!
+          setCurrentServerIndex(serverIndex);
+          setPeer(newPeer);
+          setMyPeerId(newPeer.id);
+          setConnectionStatus('연결 준비 완료');
+          setIsConnecting(false);
+          
+          // 수신 연결 처리
+          newPeer.on('connection', (conn) => {
+            addLog('info', `📞 수신 연결: ${conn.peer}`);
+            setupConnection(conn);
+          });
 
-      newPeer.on('error', (error) => {
-        addLog('error', `❌ Peer 오류: ${error.type} - ${error.message}`);
-        setConnectionStatus('Peer 생성 실패');
-      });
-
-      // 수신 연결 처리
-      newPeer.on('connection', (conn) => {
-        addLog('info', `📞 수신 연결: ${conn.peer}`);
-        setupConnection(conn);
-      });
-
-      newPeer.on('disconnected', () => {
-        addLog('warning', '⚠️ PeerJS 서버 연결 끊김');
-        setTimeout(() => {
-          if (newPeer && !newPeer.destroyed) {
-            addLog('info', '🔄 자동 재연결 시도');
-            newPeer.reconnect();
-          }
-        }, 3000);
-      });
-
-      setPeer(newPeer);
-
-    } catch (error) {
-      addLog('error', `Peer 생성 실패: ${error}`);
-      setConnectionStatus('생성 실패');
+          // NAT 타입 탐지 시작
+          detectNAT();
+          return;
+        }
+      } catch (error) {
+        addLog('error', `서버 ${serverIndex} 연결 실패: ${error}`);
+      }
     }
+    
+    // 모든 서버 실패
+    addLog('error', '💥 모든 PeerJS 서버 연결 실패');
+    setConnectionStatus('모든 서버 연결 실패');
+    setIsConnecting(false);
   };
 
   // 연결 설정
@@ -253,7 +311,6 @@ export default function P2PNATTestPage() {
       // 연결 진행상황 모니터링
       const progressTimer = setInterval(() => {
         if (!conn.open) {
-          const elapsed = Math.floor((Date.now() - Date.now()) / 1000);
           addLog('info', `⏳ NAT 통과 시도 중... (ICE 협상)`);
         } else {
           clearInterval(progressTimer);
@@ -265,6 +322,7 @@ export default function P2PNATTestPage() {
         clearInterval(progressTimer);
         addLog('success', '🎉 NAT 통과 성공! 연결 완료!');
         setupConnection(conn);
+        setCurrentAttempt(0); // 성공 시 재시도 카운터 리셋
       });
 
       // 연결 실패 처리
@@ -314,6 +372,12 @@ export default function P2PNATTestPage() {
     setMessageInput('');
   };
 
+  // 서버 변경
+  const switchServer = () => {
+    setCurrentServerIndex(prev => (prev + 1) % PEER_SERVERS.length);
+    createPeer();
+  };
+
   // 페이지 로드 시 자동으로 Peer 생성
   useEffect(() => {
     createPeer();
@@ -326,7 +390,7 @@ export default function P2PNATTestPage() {
     <div className="min-h-screen bg-black text-green-500 font-mono p-4">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-8 text-green-400">
-          🔥 P2P NAT 통과 마스터 테스트
+          🔥 P2P NAT 통과 마스터 테스트 v2.0
         </h1>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -334,6 +398,21 @@ export default function P2PNATTestPage() {
           <div className="bg-gray-900 border-2 border-green-500 rounded-lg p-4">
             <h2 className="text-xl font-bold mb-4 text-green-400">🎮 연결 제어</h2>
             
+            {/* 서버 정보 */}
+            <div className="mb-4 p-2 bg-gray-800 rounded">
+              <div className="text-sm text-gray-400">활성 서버:</div>
+              <div className="text-sm text-blue-400">
+                {PEER_SERVERS[currentServerIndex]?.name || '없음'}
+              </div>
+              <button
+                onClick={switchServer}
+                disabled={isConnecting}
+                className="mt-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded text-white text-xs"
+              >
+                서버 변경
+              </button>
+            </div>
+
             {/* 내 Peer ID */}
             <div className="mb-4">
               <label className="block text-sm mb-2">내 Peer ID:</label>
@@ -343,7 +422,7 @@ export default function P2PNATTestPage() {
                   value={myPeerId}
                   readOnly
                   className="flex-1 p-2 bg-gray-800 border border-gray-600 rounded text-yellow-400 font-bold"
-                  placeholder="Peer 생성 중..."
+                  placeholder="서버 연결 중..."
                 />
                 <button
                   onClick={() => navigator.clipboard.writeText(myPeerId)}
@@ -386,6 +465,15 @@ export default function P2PNATTestPage() {
               className="w-full py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded text-white font-bold"
             >
               🚀 NAT 통과 연결 시도
+            </button>
+
+            {/* 재연결 버튼 */}
+            <button
+              onClick={createPeer}
+              disabled={isConnecting}
+              className="w-full mt-2 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 rounded text-white font-bold"
+            >
+              🔄 Peer 재생성
             </button>
 
             {/* 메시지 테스트 */}
@@ -450,35 +538,35 @@ export default function P2PNATTestPage() {
 
         {/* 사용 방법 */}
         <div className="mt-8 bg-gray-900 border-2 border-yellow-500 rounded-lg p-4">
-          <h2 className="text-xl font-bold mb-4 text-yellow-400">📋 NAT 통과 테스트 방법</h2>
+          <h2 className="text-xl font-bold mb-4 text-yellow-400">📋 개선된 NAT 통과 테스트</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
-              <h3 className="font-bold text-green-400 mb-2">1단계: 호스트 설정</h3>
+              <h3 className="font-bold text-green-400 mb-2">🔥 v2.0 개선사항</h3>
               <ul className="space-y-1 text-gray-300">
-                <li>• 페이지 로드 시 자동으로 Peer ID 생성</li>
-                <li>• NAT 타입 자동 탐지</li>
-                <li>• Peer ID 복사 버튼 클릭</li>
-                <li>• 상대방에게 ID 전달</li>
+                <li>• 다중 PeerJS 서버 자동 전환</li>
+                <li>• 5초 내 서버 연결 실패 시 다음 서버</li>
+                <li>• 서버 수동 변경 기능</li>
+                <li>• 재연결 버튼으로 수동 복구</li>
               </ul>
             </div>
             <div>
-              <h3 className="font-bold text-green-400 mb-2">2단계: 클라이언트 연결</h3>
+              <h3 className="font-bold text-green-400 mb-2">🎯 서버 연결 순서</h3>
               <ul className="space-y-1 text-gray-300">
-                <li>• 다른 기기에서 이 페이지 접속</li>
-                <li>• 받은 Peer ID 입력</li>
-                <li>• "NAT 통과 연결 시도" 클릭</li>
-                <li>• 30초 대기 (NAT 통과 시간)</li>
+                <li>• 1순위: PeerJS 공식 서버</li>
+                <li>• 2순위: PeerJS 기본 서버</li>
+                <li>• 3순위: Peer.land 서버</li>
+                <li>• 모든 서버 실패 시 수동 재시도</li>
               </ul>
             </div>
           </div>
           
           <div className="mt-4 p-3 bg-red-900 border border-red-500 rounded">
-            <h3 className="font-bold text-red-400 mb-2">⚠️ NAT 통과 실패 시 해결책</h3>
+            <h3 className="font-bold text-red-400 mb-2">⚠️ 서버 연결 실패 시 해결책</h3>
             <ul className="space-y-1 text-sm text-gray-300">
-              <li>• 양쪽 모두 모바일 핫스팟 사용 (다른 네트워크)</li>
-              <li>• VPN 연결 후 재시도</li>
-              <li>• 공용 Wi-Fi에서 테스트</li>
-              <li>• 방화벽/보안 프로그램 임시 해제</li>
+              <li>• "서버 변경" 버튼으로 다른 서버 시도</li>
+              <li>• "Peer 재생성" 버튼으로 완전 재시작</li>
+              <li>• 페이지 새로고침 후 재시도</li>
+              <li>• 네트워크 환경 변경 (모바일 핫스팟 등)</li>
             </ul>
           </div>
         </div>
