@@ -423,9 +423,10 @@ export default function AdvancedP2PPhysics() {
           messageId
         });
         
-        // 오래된 핑 요청 정리 (5초 이상)
+        // 오래된 핑 요청 정리 (5초 이상) - ES5 호환성 수정
         const now = Date.now();
-        for (const [id, time] of pendingPingsRef.current.entries()) {
+        const entries = Array.from(pendingPingsRef.current.entries());
+        for (const [id, time] of entries) {
           if (now - time > 5000) {
             pendingPingsRef.current.delete(id);
           }
