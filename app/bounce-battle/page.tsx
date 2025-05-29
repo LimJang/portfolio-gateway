@@ -203,9 +203,10 @@ export default function BounceBattlePage() {
       addLog(`✅ 호스트: ${conn.peer} 연결 완료`);
     });
     
-    conn.on('data', (data: NetworkMessage) => {
-      addLog(`📨 호스트: ${conn.peer}에서 메시지 받음 (${data.type})`);
-      handleNetworkMessage(data, conn);
+    conn.on('data', (data) => {
+      const message = data as NetworkMessage;
+      addLog(`📨 호스트: ${conn.peer}에서 메시지 받음 (${message.type})`);
+      handleNetworkMessage(message, conn);
     });
 
     conn.on('close', () => {
@@ -228,8 +229,9 @@ export default function BounceBattlePage() {
   const setupConnectionForClient = (conn: DataConnection) => {
     setConnections([conn]);
     
-    conn.on('data', (data: NetworkMessage) => {
-      handleNetworkMessage(data, conn);
+    conn.on('data', (data: unknown) => {
+      const message = data as NetworkMessage;
+      handleNetworkMessage(message, conn);
     });
 
     conn.on('close', () => {
