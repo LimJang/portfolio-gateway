@@ -194,8 +194,8 @@ export default function BounceBattlePage() {
   const setupConnection = (conn: DataConnection) => {
     setConnections(prev => [...prev, conn]);
     
-    conn.on('data', (data: NetworkMessage) => {
-      handleNetworkMessage(data, conn);
+    conn.on('data', (data: unknown) => {
+      handleNetworkMessage(data as NetworkMessage, conn);
     });
 
     conn.on('close', () => {
