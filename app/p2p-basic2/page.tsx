@@ -33,22 +33,26 @@ interface ConnectionStats {
   bytesSent: number;
 }
 
-// 🌐 최적화된 ICE 서버 구성 (Bonk.io 수준)
+// 🌐 최적화된 ICE 서버 구성 (Bonk.io 수준) - 강화된 버전
 const OPTIMIZED_ICE_SERVERS = [
   // 1차: 빠른 STUN 서버들 (지역별 분산)
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
   { urls: 'stun:global.stun.twilio.com:3478' },
   { urls: 'stun:stun.cloudflare.com:3478' },
   { urls: 'stun:stun.nextcloud.com:443' },
+  { urls: 'stun:stun.stunprotocol.org:3478' },
   
-  // 2차: 백업 TURN 서버들 (다중 프로토콜)
+  // 2차: 강화된 TURN 서버들 (다중 프로토콜 + 포트)
   {
     urls: [
       'turn:openrelay.metered.ca:80',
       'turn:openrelay.metered.ca:443',
-      'turn:openrelay.metered.ca:80?transport=tcp'
+      'turn:openrelay.metered.ca:80?transport=tcp',
+      'turn:openrelay.metered.ca:443?transport=tcp'
     ],
     username: 'openrelayproject',
     credential: 'openrelayproject'
@@ -56,10 +60,29 @@ const OPTIMIZED_ICE_SERVERS = [
   {
     urls: [
       'turn:relay.metered.ca:80',
-      'turn:relay.metered.ca:443'
+      'turn:relay.metered.ca:443',
+      'turn:relay.metered.ca:80?transport=tcp',
+      'turn:relay.metered.ca:443?transport=tcp'
     ],
     username: 'openrelayproject',
     credential: 'openrelayproject'
+  },
+  // 3차: 추가 백업 TURN 서버들
+  {
+    urls: [
+      'turn:numb.viagenie.ca',
+      'turn:numb.viagenie.ca:3478?transport=tcp'
+    ],
+    username: 'webrtc@live.com',
+    credential: 'muazkh'
+  },
+  {
+    urls: [
+      'turn:turn.bistri.com:80',
+      'turn:turn.bistri.com:80?transport=tcp'
+    ],
+    username: 'homeo',
+    credential: 'homeo'
   }
 ];
 
@@ -153,7 +176,7 @@ export default function AdvancedP2PPhysics() {
           iceCandidatePoolSize: 10,         // 충분한 후보 풀
           sdpSemantics: 'unified-plan'
         },
-        debug: 1, // 상세 디버그 로그
+        debug: 2, // 더 상세한 디버그 로그
         secure: true
       });
 
@@ -163,6 +186,7 @@ export default function AdvancedP2PPhysics() {
         setConnectionStatus('Peer 준비 완료');
         addLog(`🎯 Peer ID 생성 완료: ${id}`, 'success');
         addLog(`📡 ${OPTIMIZED_ICE_SERVERS.length}개 STUN/TURN 서버 준비`, 'info');
+        addLog('🚪 NAT 타입 감지 시작...', 'info');
       });
 
       newPeer.on('connection', (conn) => {
@@ -172,8 +196,12 @@ export default function AdvancedP2PPhysics() {
 
       newPeer.on('error', (error) => {
         addLog(`❌ Peer 오류: ${error.type} - ${error.message}`, 'error');
+        // 더 자세한 오류 정보 로깅
+        if (error.message) {
+          addLog(`🔍 상세 오류: ${error.message}`, 'error');
+        }
         setConnectionStatus(`오류: ${error.type}`);
-        console.error('Peer error:', error);
+        console.error('Peer error details:', error);
       });
 
       newPeer.on('disconnected', () => {
@@ -201,10 +229,11 @@ export default function AdvancedP2PPhysics() {
     startPhysicsLoop();
   }, [peer, myPeerId]);
 
-  // 🔄 연결 재시도 로직
+  // 🔄 연결 재시도 로직 - 강화된 버전
   const connectWithRetry = useCallback(async (targetPeerId: string, attempt: number = 1): Promise<DataConnection | null> => {
     if (attempt > maxConnectionAttempts) {
       addLog(`❌ 최대 재시도 횟수 초과 (${maxConnectionAttempts}회)`, 'error');
+      addLog('📝 가능한 원인: NAT 타입 불일치, 방화벽 차단, TURN 서버 과부하', 'error');
       return null;
     }
 
@@ -212,37 +241,73 @@ export default function AdvancedP2PPhysics() {
       setConnectionStatus(`연결 시도 중... (${attempt}/${maxConnectionAttempts})`);
       addLog(`🔗 연결 시도 ${attempt}: ${targetPeerId}`, 'info');
       
-      const conn = peer!.connect(targetPeerId, {
+      // 각 시도마다 다른 설정 사용
+      const connectionOptions = {
         reliable: true,
-        serialization: 'json'
-      });
+        serialization: 'json',
+        ...(attempt === 1 && { 
+          // 1번째 시도: 빠른 연결 선호
+          config: { iceTransportPolicy: 'all' }
+        }),
+        ...(attempt === 2 && { 
+          // 2번째 시도: TURN 서버 강제 사용
+          config: { iceTransportPolicy: 'relay' }
+        }),
+        ...(attempt === 3 && { 
+          // 3번째 시도: 모든 옵션 사용
+          config: { 
+            iceTransportPolicy: 'all',
+            iceCandidatePoolSize: 20,
+            bundlePolicy: 'max-bundle'
+          }
+        })
+      };
+      
+      const conn = peer!.connect(targetPeerId, connectionOptions);
       
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           conn.close();
-          reject(new Error('연결 타임아웃'));
-        }, 10000); // 10초 타임아웃
+          reject(new Error(`연결 타임아웃 (${attempt}번째 시도)`));
+        }, 15000); // 15초 타임아웃 (기존 10초에서 확장)
 
         conn.on('open', () => {
           clearTimeout(timeout);
-          addLog(`✅ 연결 성공! (시도 ${attempt}회)`, 'success');
+          addLog(`✅ 연결 성공! (시도 ${attempt}회) - 연결 타입: ${attempt === 1 ? 'DIRECT' : attempt === 2 ? 'RELAY' : 'MIXED'}`, 'success');
           setConnectionStatus('연결 성공');
           resolve(conn);
         });
 
         conn.on('error', (error) => {
           clearTimeout(timeout);
-          addLog(`❌ 연결 오류: ${error}`, 'error');
+          addLog(`❌ 연결 오류 (${attempt}번째): ${error}`, 'error');
           reject(error);
         });
+        
+        // ICE 후보 모니터링 추가
+        if (conn.peerConnection) {
+          conn.peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+              const candidate = event.candidate;
+              const type = candidate.type;
+              const protocol = candidate.protocol;
+              addLog(`🔍 ICE 후보 (시도 ${attempt}): ${type} (${protocol})`, 'info');
+            }
+          };
+          
+          conn.peerConnection.onconnectionstatechange = () => {
+            const state = conn.peerConnection?.connectionState;
+            addLog(`🔗 연결 상태 (시도 ${attempt}): ${state}`, 'info');
+          };
+        }
       });
 
     } catch (error) {
       addLog(`⚠️ 연결 시도 ${attempt} 실패: ${error}`, 'warning');
       
       if (attempt < maxConnectionAttempts) {
-        const delay = 1000 * attempt; // 지수 백오프
-        addLog(`⏳ ${delay}ms 후 재시도...`, 'info');
+        const delay = 2000 * attempt; // 지수 백오프 (2초, 4초, 6초)
+        addLog(`⏳ ${delay}ms 후 다른 전략으로 재시도...`, 'info');
         await new Promise(resolve => setTimeout(resolve, delay));
         return connectWithRetry(targetPeerId, attempt + 1);
       }
