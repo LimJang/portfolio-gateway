@@ -39,7 +39,7 @@ export default function BasicP2PPhysics() {
     ball: {
       x: 200,
       y: 100,
-      vx: 2,
+      vx: 1,      // 초기 속도 설정
       vy: 0,
       radius: 20,
       color: '#ff4444'
@@ -190,7 +190,10 @@ export default function BasicP2PPhysics() {
       if (message.type === 'physics_update') {
         // 호스트로부터 물리 상태 받아서 동기화
         setPhysicsState(message.data);
-        addLog(`📊 물리 상태 동기화 (${message.data.timestamp})`);
+        // 로그는 가끔만 표시 (매번 뜨면 너무 많음)
+        if (Math.random() < 0.1) { // 10% 확률로만 로그 표시
+          addLog(`📊 물리 동기화 X:${Math.round(message.data.ball.x)} Y:${Math.round(message.data.ball.y)}`);
+        }
       }
     });
 
@@ -234,7 +237,7 @@ export default function BasicP2PPhysics() {
           newState.ball = {
             x: 200,
             y: 100,
-            vx: 2,
+            vx: 1,      // 초기 속도 설정
             vy: 0,
             radius: 20,
             color: '#ff4444'
@@ -300,16 +303,18 @@ export default function BasicP2PPhysics() {
     addLog('🔄 물리 시뮬레이션 시작');
     
     const physicsLoop = () => {
-      updatePhysics();
-      
-      // 클라이언트에게 물리 상태 전송 (30fps)
-      if (isHost && connection && connection.open && Date.now() - lastSyncRef.current > 33) {
-        sendMessage(connection, {
-          type: 'physics_update',
-          data: physicsState,
-          timestamp: Date.now()
-        });
-        lastSyncRef.current = Date.now();
+      if (isHost) {
+        updatePhysics();
+        
+        // 클라이언트에게 물리 상태 전송 (30fps)
+        if (connection && connection.open && Date.now() - lastSyncRef.current > 33) {
+          sendMessage(connection, {
+            type: 'physics_update',
+            data: physicsState,
+            timestamp: Date.now()
+          });
+          lastSyncRef.current = Date.now();
+        }
       }
       
       animationRef.current = requestAnimationFrame(physicsLoop);
