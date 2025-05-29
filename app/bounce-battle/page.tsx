@@ -277,13 +277,21 @@ export default function BounceBattlePage() {
     });
   };
 
-  // 📨 네트워크 메시지 처리
+  // 📨 네트워크 메시지 처리 - 🔧 Stale Closure 문제 해결
   const handleNetworkMessage = (message: NetworkMessage, conn: DataConnection) => {
+    addLog(`🔍 메시지 처리: ${message.type} | 현재 isHost: ${isHost}`);
+    
     switch (message.type) {
       case 'player_join':
-        if (isHost) {
-          addLog(`👤 플레이어 참가 요청: ${message.data.name} (${message.data.id})`);
+        addLog(`🔍 player_join 수신 | isHost: ${isHost}`);
+        // 🔧 조건 체크 제거하고 항상 처리 (호스트만 이 메시지를 받을 것이므로)
+        addLog(`👤 플레이어 참가 요청: ${message.data.name} (${message.data.id})`);
+        try {
           handlePlayerJoin(message.data, conn);
+          addLog(`✅ handlePlayerJoin 성공 완료`);
+        } catch (error) {
+          addLog(`❌ handlePlayerJoin 오류: ${error}`);
+          console.error('[BOUNCE] handlePlayerJoin error:', error);
         }
         break;
         
@@ -311,12 +319,23 @@ export default function BounceBattlePage() {
     }
   };
 
-  // 👤 플레이어 참가 처리 (Host만) - 🔧 동기화 문제 해결
+  // 👤 플레이어 참가 처리 - 🔧 상세 디버깅 추가
   const handlePlayerJoin = (playerData: any, conn: DataConnection) => {
-    addLog(`🔄 플레이어 추가 처리 시작: ${playerData.name} (${playerData.id})`);
+    addLog(`🔄 [STEP 1] 플레이어 추가 처리 시작: ${playerData.name} (${playerData.id})`);
+    addLog(`🔍 [DEBUG] 현재 isHost: ${isHost}, gameState.players: ${gameState.players.length}`);
     
-    // 🔧 즉시 실행 가능한 로직으로 변경
-    setGameState(prevState => {
+    // 🔧 현재 상태 강제 출력
+    console.log('[BOUNCE DEBUG] Current gameState:', gameState);
+    console.log('[BOUNCE DEBUG] Current connections:', connections.length);
+    console.log('[BOUNCE DEBUG] Is Host:', isHost);
+    
+    try {
+      addLog(`🔍 [STEP 2] setGameState 호출 시작...`);
+      
+      // 🔧 즉시 실행 가능한 로직으로 변경
+      setGameState(prevState => {
+        addLog(`🔍 [STEP 3] setGameState 콜백 진입 | prevState.players: ${prevState.players.length}`);
+        console.log('[BOUNCE DEBUG] prevState:', prevState);
       // 이미 존재하는 플레이어인지 확인
       const existingPlayer = prevState.players.find(p => p.id === playerData.id);
       if (existingPlayer) {
@@ -334,6 +353,8 @@ export default function BounceBattlePage() {
         
         return prevState;
       }
+      
+      addLog(`🔍 [STEP 4B] 새 플레이어 생성 시작...`);
       
       // 새 플레이어 생성
       const newPlayer: Player = {
@@ -356,12 +377,16 @@ export default function BounceBattlePage() {
       
       // 🔧 즉시 로그 및 강제 업데이트
       const playerCount = newState.players.length;
-      addLog(`✅ 플레이어 추가 완료: ${playerData.name} (총 ${playerCount}명)`);
+      addLog(`✅ [STEP 5] 플레이어 추가 완료: ${playerData.name} (총 ${playerCount}명)`);
+      console.log('[BOUNCE DEBUG] New state created:', newState);
       
       // 🔧 강제 리렌더링 트리거
       setTimeout(() => {
-        setForceUpdate(prev => prev + 1);
-        addLog(`🔄 UI 강제 업데이트 (총 플레이어: ${playerCount}명)`);
+        setForceUpdate(prev => {
+          const newCount = prev + 1;
+          addLog(`🔄 [STEP 6] UI 강제 업데이트 (총 플레이어: ${playerCount}명, Update: ${newCount})`);
+          return newCount;
+        });
       }, 10);
       
       // 🔧 새 플레이어에게 게임 상태 전송
@@ -372,14 +397,22 @@ export default function BounceBattlePage() {
             data: newState,
             timestamp: Date.now()
           });
-          addLog(`📤 게임 상태 전송 완료: ${playerData.name} (${playerCount}명)`);
+          addLog(`📤 [STEP 7] 게임 상태 전송 완료: ${playerData.name} (${playerCount}명)`);
         } else {
-          addLog(`❌ 연결이 닫혀있어 게임 상태 전송 실패: ${playerData.name}`);
+          addLog(`❌ [STEP 7] 연결이 닫혀있어 게임 상태 전송 실패: ${playerData.name}`);
         }
       }, 150);
       
+      addLog(`🔍 [STEP 8] newState 리턴: players=${newState.players.length}`);
       return newState;
     });
+    
+    addLog(`🔍 [STEP 9] setGameState 호출 완료`);
+    
+  } catch (error) {
+    addLog(`❌ [ERROR] handlePlayerJoin 실행 중 오류: ${error}`);
+    console.error('[BOUNCE ERROR]', error);
+  }
   };
 
   // 🎮 플레이어 입력 처리 (Host만)
