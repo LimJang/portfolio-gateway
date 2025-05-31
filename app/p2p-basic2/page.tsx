@@ -33,9 +33,21 @@ interface ConnectionStats {
   bytesSent: number;
 }
 
-// 🌐 최적화된 ICE 서버 구성 (Bonk.io 수준) - 강화된 버전
+// 🌐 최적화된 ICE 서버 구성 (Bonk.io 수준) - Railway CoTURN 추가
+const RAILWAY_COTURN_SERVER = {
+  urls: [
+    'turn:fabulous-trust-production.up.railway.app:3478',
+    'turn:fabulous-trust-production.up.railway.app:3478?transport=tcp'
+  ],
+  username: 'railway',
+  credential: 'RailwayP2P123!'
+};
+
 const OPTIMIZED_ICE_SERVERS = [
-  // 1차: 빠른 STUN 서버들 (지역별 분산)
+  // 1차: 우리 Railway CoTURN 서버 (최우선!)
+  RAILWAY_COTURN_SERVER,
+  
+  // 2차: 빠른 STUN 서버들 (지역별 분산)
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
@@ -46,7 +58,7 @@ const OPTIMIZED_ICE_SERVERS = [
   { urls: 'stun:stun.nextcloud.com:443' },
   { urls: 'stun:stun.stunprotocol.org:3478' },
   
-  // 2차: 강화된 TURN 서버들 (다중 프로토콜 + 포트)
+  // 3차: 백업 TURN 서버들 (다중 프로토콜 + 포트)
   {
     urls: [
       'turn:openrelay.metered.ca:80',
@@ -67,7 +79,7 @@ const OPTIMIZED_ICE_SERVERS = [
     username: 'openrelayproject',
     credential: 'openrelayproject'
   },
-  // 3차: 추가 백업 TURN 서버들
+  // 4차: 추가 백업 TURN 서버들
   {
     urls: [
       'turn:numb.viagenie.ca',
@@ -185,7 +197,8 @@ export default function AdvancedP2PPhysics() {
         setPeer(newPeer);
         setConnectionStatus('Peer 준비 완료');
         addLog(`🎯 Peer ID 생성 완료: ${id}`, 'success');
-        addLog(`📡 ${OPTIMIZED_ICE_SERVERS.length}개 STUN/TURN 서버 준비`, 'info');
+        addLog(`🚂 Railway CoTURN 서버 + ${OPTIMIZED_ICE_SERVERS.length-1}개 백업 서버 준비`, 'success');
+        addLog('🎉 fabulous-trust-production.up.railway.app 준비 완료!', 'success');
         addLog('🚪 NAT 타입 감지 시작...', 'info');
       });
 
