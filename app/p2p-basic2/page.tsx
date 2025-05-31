@@ -36,8 +36,8 @@ interface ConnectionStats {
 // 🌐 최적화된 ICE 서버 구성 (Bonk.io 수준) - Railway CoTURN 추가
 const RAILWAY_COTURN_SERVER = {
   urls: [
-    'turn:fabulous-trust-production.up.railway.app:3478',
-    'turn:fabulous-trust-production.up.railway.app:3478?transport=tcp'
+    'turn:coturn-railway-server-production.up.railway.app:3478',
+    'turn:coturn-railway-server-production.up.railway.app:3478?transport=tcp'
   ],
   username: 'railway',
   credential: 'RailwayP2P123!'
