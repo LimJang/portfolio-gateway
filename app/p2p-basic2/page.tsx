@@ -40,7 +40,8 @@ const RAILWAY_COTURN_SERVER = {
     'turn:coturn-railway-server-production.up.railway.app:3478?transport=tcp'
   ],
   username: 'railway',
-  credential: 'RailwayP2P123!'
+  credential: 'RailwayP2P123!',
+  realm: 'railway.webrtc'  // ✅ Railway와 일치하도록 realm 추가
 };
 
 const OPTIMIZED_ICE_SERVERS = [
