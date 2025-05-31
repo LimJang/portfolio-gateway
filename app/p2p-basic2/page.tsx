@@ -182,6 +182,13 @@ export default function AdvancedP2PPhysics() {
       
       console.log('🔍 ICE Servers 확인:', OPTIMIZED_ICE_SERVERS);
       
+      // PeerJS 대신 직접 RTCPeerConnection 설정 테스트
+      const testRTC = new RTCPeerConnection({
+        iceServers: OPTIMIZED_ICE_SERVERS,
+        iceTransportPolicy: 'all'
+      });
+      console.log('🔬 RTCPeerConnection 설정:', testRTC.getConfiguration());
+      
       const newPeer = new Peer(peerId, {
         config: {
           iceServers: OPTIMIZED_ICE_SERVERS,
