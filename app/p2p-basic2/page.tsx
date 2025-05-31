@@ -198,7 +198,7 @@ export default function AdvancedP2PPhysics() {
         setConnectionStatus('Peer 준비 완료');
         addLog(`🎯 Peer ID 생성 완료: ${id}`, 'success');
         addLog(`🚂 Railway CoTURN 서버 + ${OPTIMIZED_ICE_SERVERS.length-1}개 백업 서버 준비`, 'success');
-        addLog('🎉 fabulous-trust-production.up.railway.app 준비 완료!', 'success');
+        addLog('🎉 coturn-railway-server-production.up.railway.app 준비 완료!', 'success');
         addLog('🚪 NAT 타입 감지 시작...', 'info');
       });
 
