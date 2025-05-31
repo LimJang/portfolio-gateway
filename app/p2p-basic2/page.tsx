@@ -180,6 +180,8 @@ export default function AdvancedP2PPhysics() {
       setConnectionStatus('Peer 생성 중...');
       addLog('🚀 고급 P2P 시스템 초기화 중...', 'info');
       
+      console.log('🔍 ICE Servers 확인:', OPTIMIZED_ICE_SERVERS);
+      
       const newPeer = new Peer(peerId, {
         config: {
           iceServers: OPTIMIZED_ICE_SERVERS,
